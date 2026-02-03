@@ -3,85 +3,86 @@ import pandas as pd
 import requests
 from io import BytesIO
 
-# 1. Configuração da página
-st.set_page_config(page_title="Sistema MASP - Lina", layout="wide")
+# Configuração da página
+st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
-# --- SEU LINK DE PUBLICAÇÃO CORRETO INSERIDO AQUI ---
-URL_FINAL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+# --- DIRETRIZ: URL CONFERIDA CARACTERE POR CARACTERE ---
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
-# 2. Função de cores
 def destacar_estoque(valor):
     try:
         num = float(valor)
-        if num == 0: return 'background-color: #ff4b4b; color: white;'
-        elif num < 5: return 'background-color: #f1c40f; color: black;'
+        if num == 0: 
+            return 'background-color: #ff4b4b; color: white;' # Vermelho
+        elif num < 5: 
+            return 'background-color: #f1c40f; color: black;' # Amarelo
         return ''
-    except: return ''
+    except:
+        return ''
 
-# 3. Função de carregamento (Documento Inteiro)
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=25)
         if response.status_code == 200:
-            # Carrega todas as abas: Estoque, Utilizado, Solicitado
+            # Carrega todas as abas usando o motor openpyxl (xlsx)
             return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-        return f"Erro Google: {response.status_code}"
+        return None
     except Exception as e:
-        return str(e)
+        st.error(f"Erro de conexão: {e}")
+        return None
 
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 
-# Menu lateral para atualização manual
-if st.sidebar.button("🔄 Atualizar Dados Agora"):
+# Menu lateral para atualização
+if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
 
-try:
-    dados_abas = carregar_dados_seguro(URL_FINAL)
+# --- CARREGAMENTO ---
+dict_abas = carregar_dados_seguro(URL_PUB)
+
+if dict_abas:
+    # Menu para escolher as abas
+    aba_selecionada = st.sidebar.radio("Selecione a Tabela:", list(dict_abas.keys()))
+    df = dict_abas[aba_selecionada].copy()
+
+    # 1. Limpeza de nomes de colunas
+    df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    if isinstance(dados_abas, dict):
-        # Menu lateral para navegar entre as abas
-        aba_selecionada = st.sidebar.selectbox("Escolha a Tabela:", list(dados_abas.keys()))
-        df = dados_abas[aba_selecionada].copy()
+    # 2. Tratamento de células mescladas (ffill na coluna Categoria)
+    col_cat = [c for c in df.columns if 'Categoria' in c]
+    if col_cat:
+        df[col_cat[0]] = df[col_cat[0]].ffill()
 
-        # --- TRATAMENTO DOS DADOS ---
-        # Limpa nomes de colunas
-        df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
-        
-        # Preenchimento de categorias mescladas (ffill na coluna Categoria)
-        if 'Categoria' in df.columns:
-            df['Categoria'] = df['Categoria'].ffill()
+    # 3. Identifica colunas numéricas (Saldo, Total, Manut, Uso, Qtd)
+    palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
+    col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
+    
+    for col in col_nums:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        # Identifica colunas numéricas (Saldo, Total, Manut, Uso, Qtd)
-        palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
-        col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
-        
-        for col in col_nums:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+    # --- 4. BUSCA INTELIGENTE (Indiferente a Maiúsculas/Minúsculas) ---
+    st.markdown(f"### 🔍 Pesquisar em {aba_selecionada}")
+    busca = st.text_input("Digite o nome do equipamento ou marca:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
 
-        # --- BUSCA INTELIGENTE (Indiferente a Maiúsculas/Minúsculas) ---
-        st.markdown(f"### 🔍 Pesquisar em {aba_selecionada}")
-        busca = st.text_input("Pesquisar por Ítem, Marca ou Categoria:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
+    if busca:
+        # Filtra em qualquer coluna, ignorando case (maiúsculo/minúsculo)
+        mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
+        df = df[mask]
 
-        if busca:
-            # case=False garante que ignore maiúsculas/minúsculas
-            mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
-            df = df[mask]
+    # 5. Identifica coluna de cor (Saldo ou Disponível)
+    col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-        # Identifica a coluna para as cores (Saldo ou Disponível)
-        col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
-
-        # Exibição da Tabela
-        st.dataframe(
-            df.style.applymap(destacar_estoque, subset=col_cor)
-                    .format({c: "{:.0f}" for c in col_nums}),
-            use_container_width=True,
-            height=600
-        )
-    else:
-        st.error(f"Erro na conexão: {dados_abas}")
-
-except Exception as e:
-    st.error(f"Ocorreu um erro: {e}")
+    # 6. Exibição da Tabela
+    # Corrigido: 'applymap' para versões mais antigas do pandas ou 'map' para novas
+    # O Streamlit lida melhor com .style.map para destacar células individuais
+    st.dataframe(
+        df.style.map(destacar_estoque, subset=col_cor)
+                .format({c: "{:.0f}" for c in col_nums}),
+        use_container_width=True,
+        height=600
+    )
+else:
+    st.info("💡 Conectando ao Google Sheets... Verifique se a planilha está publicada como Excel (.xlsx).")
