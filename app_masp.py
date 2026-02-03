@@ -3,8 +3,8 @@ import pandas as pd
 import requests
 from io import BytesIO
 
-# Configuração da página
-st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
+# 1. Configuração da página
+st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
 # --- DIRETRIZ: URL CONFERIDA CARACTERE POR CARACTERE ---
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
@@ -26,63 +26,91 @@ def carregar_dados_seguro(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=25)
         if response.status_code == 200:
-            # Carrega todas as abas usando o motor openpyxl (xlsx)
             return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
         return None
     except Exception as e:
         st.error(f"Erro de conexão: {e}")
         return None
 
-st.title("🏛️ Gestão de Iluminação MASP - Lina")
+# --- TOPO COM LOGO E TÍTULO ---
+c_logo, c_tit = st.columns([1, 4]) 
+with c_logo:
+    st.image("https://masp.org.br", width=120)
+with c_tit:
+    st.title("Gestão de Iluminação MASP - Lina")
+    st.markdown("*Sistema de Monitoramento em Nuvem*")
 
-# Menu lateral para atualização
+# Menu lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
 
-# --- CARREGAMENTO ---
 dict_abas = carregar_dados_seguro(URL_PUB)
 
 if dict_abas:
-    # Menu para escolher as abas
-    aba_selecionada = st.sidebar.radio("Selecione a Tabela:", list(dict_abas.keys()))
-    df = dict_abas[aba_selecionada].copy()
+    abas_disponiveis = list(dict_abas.keys())
+    aba_sel = st.sidebar.radio("Selecione a Tabela:", abas_disponiveis)
+    df = dict_abas[aba_sel].copy()
 
     # 1. Limpeza de nomes de colunas
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. Tratamento de células mescladas (ffill na coluna Categoria)
-    col_cat = [c for c in df.columns if 'Categoria' in c]
-    if col_cat:
-        df[col_cat[0]] = df[col_cat[0]].ffill()
+    # 2. Tratamento de células mescladas (ffill seguro)
+    col_cat_nome = [c for c in df.columns if 'Categoria' in c]
+    if col_cat_nome:
+        # Preenche a coluna categoria para que os filtros funcionem
+        df[col_cat_nome[0]] = df[col_cat_nome[0]].ffill()
 
-    # 3. Identifica colunas numéricas (Saldo, Total, Manut, Uso, Qtd)
+    # 3. Identifica colunas numéricas
     palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
-    
     for col in col_nums:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-    # --- 4. BUSCA INTELIGENTE (Indiferente a Maiúsculas/Minúsculas) ---
-    st.markdown(f"### 🔍 Pesquisar em {aba_selecionada}")
-    busca = st.text_input("Digite o nome do equipamento ou marca:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
-
+    st.markdown("---")
+    
+    # Barra de Busca e Botão de Download
+    col_busca, col_btn = st.columns([3, 1])
+    
+    with col_busca:
+        busca = st.text_input("🔍 Pesquisar Item (Indiferente a maiúsculas/minúsculas):", placeholder="Ex: PAR, Elipso, Lâmpada...")
+    
     if busca:
-        # Filtra em qualquer coluna, ignorando case (maiúsculo/minúsculo)
         mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
         df = df[mask]
 
-    # 5. Identifica coluna de cor (Saldo ou Disponível)
+    with col_btn:
+        st.write(" ") # Alinhamento
+        output = BytesIO()
+        # Necessário instalar xlsxwriter no requirements.txt
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name=aba_sel)
+        st.download_button(
+            label="📥 Baixar Excel",
+            data=output.getvalue(),
+            file_name=f"Inventario_MASP_{aba_sel}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    # Configuração de larguras (Mapeia Item com e sem acento por segurança)
+    config_colunas = {
+        "Ítem": st.column_config.TextColumn("Ítem", width="large"),
+        "Item": st.column_config.TextColumn("Item", width="large"),
+        "Categoria": st.column_config.TextColumn("Categoria", width="medium"),
+    }
+    for cn in col_nums:
+        config_colunas[cn] = st.column_config.NumberColumn(cn, width="small", format="%d")
+
+    # Identifica coluna de cor
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-    # 6. Exibição da Tabela
-    # Corrigido: 'applymap' para versões mais antigas do pandas ou 'map' para novas
-    # O Streamlit lida melhor com .style.map para destacar células individuais
+    # EXIBIÇÃO FINAL
     st.dataframe(
-        df.style.map(destacar_estoque, subset=col_cor)
-                .format({c: "{:.0f}" for c in col_nums}),
+        df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
         use_container_width=True,
-        height=600
+        height=600,
+        column_config=config_colunas
     )
+
 else:
-    st.info("💡 Conectando ao Google Sheets... Verifique se a planilha está publicada como Excel (.xlsx).")
+    st.info("💡 Conectando à nuvem... Verifique se a planilha está publicada como Excel.")
