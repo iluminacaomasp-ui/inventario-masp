@@ -3,11 +3,11 @@ import pandas as pd
 import requests
 from io import BytesIO
 
-# Configuração da página
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
-# --- LINK CORRIGIDO E COMPLETO ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+# --- LINK PUBLICADO COMO .ODS (Suporta todas as abas e fórmulas) ---
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=ods"
+
 def destacar_estoque(valor):
     try:
         num = float(valor)
@@ -17,12 +17,13 @@ def destacar_estoque(valor):
     except: return ''
 
 @st.cache_data(ttl=20)
-def carregar_dados_blindado(url):
+def carregar_tudo(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=25)
+        response = requests.get(url, headers=headers, timeout=30)
         if response.status_code == 200:
-            return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
+            # Odfpy lê o arquivo .ods com todas as abas e fórmulas calculadas
+            return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='odf')
         return None
     except Exception as e:
         st.error(f"Erro de conexão: {e}")
@@ -34,50 +35,37 @@ if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
 
-dict_abas = carregar_dados_blindado(URL_PUB)
+dict_abas = carregar_tudo(URL_PUB)
 
 if dict_abas:
-    aba = st.sidebar.selectbox("Selecione a Visualização:", list(dict_abas.keys()))
+    # Menu lateral com todas as abas originais
+    aba = st.sidebar.selectbox("Selecione a Tabela:", list(dict_abas.keys()))
     df = dict_abas[aba].copy()
 
-    # 1. LIMPEZA DE CABEÇALHOS
+    # Limpeza e tratamento
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. TRATAMENTO DE CÉLULAS MESCLADAS
+    # Preenche categoria (ffill cirúrgico)
     col_cat = [c for c in df.columns if 'Categoria' in c]
     if col_cat:
-        df[col_cat] = df[col_cat].ffill()
+        df[col_cat[0]] = df[col_cat[0]].ffill()
 
-    # 3. IDENTIFICA COLUNAS NUMÉRICAS
+    # Números sem decimais
     palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
-    
     for col in col_nums:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-    # 4. FILTRO DE CATEGORIA NA LATERAL
-    if col_cat:
-        st.sidebar.markdown("---")
-        # Pega a primeira coluna que contém 'Categoria' no nome
-        nome_col_cat = col_cat[0]
-        lista_cats = ["Todas"] + sorted(df[nome_col_cat].dropna().unique().tolist())
-        cat_sel = st.sidebar.selectbox("Filtrar por Categoria:", lista_cats)
-        if cat_sel != "Todas":
-            df = df[df[nome_col_cat] == cat_sel]
-
-    # --- 5. BUSCA INTELIGENTE (Ignora Maiúsculas/Minúsculas) ---
-    st.markdown("### 🔍 Pesquisar por Ítem")
-    busca = st.text_input("Digite o nome do equipamento:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
+    # Busca Inteligente (Ignora maiúsculas/minúsculas)
+    st.markdown(f"### 🔍 Pesquisar em {aba}")
+    busca = st.text_input("Digite o nome do equipamento:", placeholder="Ex: Par 64, Elipso...")
 
     if busca:
-        # Busca em todas as colunas de texto, case=False ignora maiúsculas/minúsculas
-        mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
-        df = df[mask]
+        df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-    # 6. CORES NO SALDO
+    # Cores
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-    # EXIBIÇÃO DA TABELA
     st.dataframe(
         df.style.applymap(destacar_estoque, subset=col_cor)
                 .format({c: "{:.0f}" for c in col_nums}),
@@ -85,4 +73,4 @@ if dict_abas:
         height=600
     )
 else:
-    st.info("💡 Conectando ao Google Sheets... Aguarde um momento.")
+    st.info("💡 Sincronizando com o Google Sheets... Verifique se a publicação como .ods está ativa.")
