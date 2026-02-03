@@ -3,10 +3,11 @@ import pandas as pd
 import requests
 from io import BytesIO
 
-st.set_page_config(page_title="Sistema MASP - Lina", layout="wide")
+st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
-# Link de exportação direta
-URL_FINAL = "https://docs.google.com"
+# LINK DE PUBLICAÇÃO (Mais estável para o Streamlit Cloud)
+# Ele usa o seu ID de planilha com o comando de publicação direta
+URL_PUB = "https://docs.google.com"
 
 def destacar_estoque(valor):
     try:
@@ -16,17 +17,15 @@ def destacar_estoque(valor):
         return ''
     except: return ''
 
-@st.cache_data(ttl=30)
-def carregar_dados_seguro(url):
+@st.cache_data(ttl=20) # Atualiza a cada 20 segundos
+def carregar_dados_blindado(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=20)
+        response = requests.get(url, headers=headers, timeout=25)
         if response.status_code == 200:
-            # sheet_name=None carrega TODAS as abas
+            # Lê todas as abas (Estoque, Utilizado, etc)
             return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-        else:
-            st.error(f"Erro do Google: Status {response.status_code}")
-            return None
+        return None
     except Exception as e:
         st.error(f"Erro de conexão: {e}")
         return None
@@ -34,60 +33,56 @@ def carregar_dados_seguro(url):
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 
 # Botão de atualização na lateral
-if st.sidebar.button("🔄 Atualizar Dados Agora"):
+if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
 
 # --- CARREGAMENTO ---
-dados_abas = carregar_dados_seguro(URL_FINAL)
+dict_abas = carregar_dados_blindado(URL_PUB)
 
-if dados_abas is None:
-    st.warning("⚠️ Aguardando resposta da planilha online... Verifique se ela está compartilhada corretamente.")
-else:
-    # Menu para escolher as abas encontradas
-    opcoes_abas = list(dados_abas.keys())
-    aba = st.sidebar.selectbox("Escolha a Tabela:", opcoes_abas)
+if dict_abas:
+    # Menu para escolher as abas
+    aba = st.sidebar.selectbox("Selecione a Visualização:", list(dict_abas.keys()))
+    df = dict_abas[aba].copy()
+
+    # 1. LIMPEZA DE CABEÇALHOS (Resolve Ítem com acento e espaços)
+    df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    df = dados_abas[aba].copy()
+    # 2. TRATAMENTO DE CÉLULAS MESCLADAS
+    # Identifica onde está a Categoria (mesmo sendo a 2ª coluna agora)
+    col_cat = [c for c in df.columns if 'Categoria' in c]
+    if col_cat:
+        df[col_cat[0]] = df[col_cat[0]].ffill()
 
-    # Se a aba estiver vazia, avisa
-    if df.empty:
-        st.info(f"A aba '{aba}' parece não conter dados.")
-    else:
-        # Limpeza de nomes
-        df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
-        
-        # Preenche apenas a categoria
-        if 'Categoria' in df.columns:
-            df['Categoria'] = df['Categoria'].ffill()
+    # 3. IDENTIFICA COLUNAS NUMÉRICAS
+    palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
+    col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
+    
+    for col in col_nums:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        # Identifica colunas de números por palavras-chave
-        palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
-        col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
-        
-        for col in col_nums:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+    # 4. FILTRO DE CATEGORIA NA LATERAL
+    if col_cat:
+        st.sidebar.markdown("---")
+        lista_cats = ["Todas"] + sorted(df[col_cat[0]].dropna().unique().tolist())
+        cat_sel = st.sidebar.selectbox("Filtrar por Categoria:", lista_cats)
+        if cat_sel != "Todas":
+            df = df[df[col_cat[0]] == cat_sel]
 
-        # Filtro de Categoria
-        if 'Categoria' in df.columns:
-            st.sidebar.markdown("---")
-            lista_cats = ["Todas"] + sorted(df['Categoria'].dropna().unique().tolist())
-            cat_sel = st.sidebar.selectbox("Filtrar Categoria:", lista_cats)
-            if cat_sel != "Todas":
-                df = df[df['Categoria'] == cat_sel]
+    # 5. BARRA DE BUSCA (Busca em qualquer coluna: Item, Marca, etc)
+    busca = st.text_input("🔍 Digite o que procura (Item ou Marca):", "")
+    if busca:
+        df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-        # Barra de Busca
-        busca = st.text_input("🔍 Pesquisar por Item ou Marca:", "")
-        if busca:
-            df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
+    # 6. CORES NO SALDO
+    col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-        # Coluna de cor
-        col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
-
-        # EXIBIÇÃO
-        st.dataframe(
-            df.style.applymap(destacar_estoque, subset=col_cor)
-                    .format({c: "{:.0f}" for c in col_nums}),
-            use_container_width=True,
-            height=600
-        )
+    # EXIBIÇÃO DA TABELA
+    st.dataframe(
+        df.style.applymap(destar_estoque, subset=col_cor)
+                .format({c: "{:.0f}" for c in col_nums}),
+        use_container_width=True,
+        height=600
+    )
+else:
+    st.info("💡 Conectando ao Google Sheets... Se o erro de 'zip file' persistir, clique no botão 'Sincronizar' na lateral.")
