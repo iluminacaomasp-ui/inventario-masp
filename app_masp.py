@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx
 
 def destacar_estoque(valor):
     try:
@@ -23,14 +23,13 @@ def destacar_estoque(valor):
 @st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
     try:
-        # Leitura binária direta
         response = requests.get(url, timeout=30)
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- CABEÇALHO LÍMPO (SEM LOGO OU COLUNAS LATERAIS) ---
+# --- CABEÇALHO LIMPO ---
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 st.markdown("*Sistema de Monitoramento Online - Espaço Lina Bo Bardi*")
 
@@ -62,14 +61,14 @@ if dict_abas:
 
     st.markdown("---")
     
-    # Barra de Busca e Botão de Download simplificados
+    # Barra de Busca
     busca = st.text_input("🔍 Pesquisar por Ítem (Maiúsculo/Minúsculo):", placeholder="Ex: Par 64, Elipso, Lâmpada...")
     
     if busca:
         mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
         df = df[mask]
 
-    # Botão de Download abaixo da busca para evitar desalinhamento visual
+    # Botão de Download
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name=aba_sel)
@@ -80,13 +79,16 @@ if dict_abas:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # 4. Configuração de colunas e CONGELAMENTO
-    # pinned=True congela a coluna à esquerda. height=600 congela o cabeçalho no topo.
+    # --- 4. CONFIGURAÇÃO DE LARGURA DAS COLUNAS (AJUSTE FINO) ---
     config_colunas = {
         "Ítem": st.column_config.TextColumn("Ítem", width="large", pinned=True),
         "Item": st.column_config.TextColumn("Item", width="large", pinned=True),
         "Categoria": st.column_config.TextColumn("Categoria", width="medium"),
+        "Marca": st.column_config.TextColumn("Marca", width="medium"),
+        "Condição": st.column_config.TextColumn("Condição", width="small"),
     }
+    
+    # Todas as colunas numéricas ficam com largura pequena para caber na tela
     for cn in col_nums:
         config_colunas[cn] = st.column_config.NumberColumn(cn, width="small", format="%d")
 
@@ -94,20 +96,12 @@ if dict_abas:
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
     # EXIBIÇÃO FINAL
-    if col_cor:
-        st.dataframe(
-            df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
-            use_container_width=True, 
-            height=600, 
-            column_config=config_colunas
-        )
-    else:
-        st.dataframe(
-            df, 
-            use_container_width=True, 
-            height=600, 
-            column_config=config_colunas
-        )
+    st.dataframe(
+        df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
+        use_container_width=True, 
+        height=600, 
+        column_config=config_colunas
+    )
 
 else:
     st.info("💡 Sincronizando com a nuvem... Clique em 'Sincronizar Agora' se a tabela não carregar.")
