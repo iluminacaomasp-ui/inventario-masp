@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+URL_PUB = "https://docs.google.com"
 
 def destacar_estoque(valor):
     try:
@@ -20,7 +20,6 @@ def destacar_estoque(valor):
 @st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
     try:
-        # Leitura binária direta (conforme nosso padrão de sucesso)
         response = requests.get(url, timeout=30)
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
@@ -31,7 +30,6 @@ def carregar_dados_seguro(url):
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 st.markdown("*Monitoramento Online - Estoque e Localização*")
 
-# Menu lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
@@ -39,22 +37,29 @@ if st.sidebar.button("🔄 Sincronizar Agora"):
 dict_abas = carregar_dados_seguro(URL_PUB)
 
 if dict_abas:
-    # --- LÓGICA PARA ESCONDER ABA DE OPERAÇÃO INTERNA ---
+    # --- LÓGICA PARA ESCONDER ABAS OPERACIONAIS E AUXILIARES ---
     lista_abas_total = list(dict_abas.keys())
-    # Remove qualquer aba que contenha 'Entrada' ou 'Saída' no nome
-    lista_abas_visiveis = [a for a in lista_abas_total if "Entrada" not in a and "Saída" not in a]
+    # Esconde Entrada, Saída e abas que contenham AUX ou CONFIG no nome
+    termos_proibidos = ["ENTRADA", "SAÍDA", "AUX", "CONFIG"]
+    lista_abas_visiveis = [
+        a for a in lista_abas_total 
+        if not any(termo in a.upper() for termo in termos_proibidos)
+    ]
     
-    # Se a lista estiver vazia por algum erro de nome, mostra todas por segurança
     if not lista_abas_visiveis:
         lista_abas_visiveis = lista_abas_total
 
     aba_sel = st.sidebar.radio("Selecione a Tabela:", lista_abas_visiveis)
     df = dict_abas[aba_sel].copy()
 
-    # 1. Limpeza de nomes de colunas
+    # 1. Limpeza de nomes e REMOÇÃO DE COLUNAS AUXILIARES (Chave, etc)
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. Tratamento de células mescladas (ffill para Categoria e Local)
+    # Filtra colunas: esconde a "Chave" e qualquer uma que o pandas nomear como "Unnamed"
+    colunas_finais = [c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]
+    df = df[colunas_finais]
+    
+    # 2. Tratamento de células mescladas (Categoria e Local)
     cols_para_preencher = [c for c in df.columns if any(p in c.lower() for p in ['categoria', 'local'])]
     for cp in cols_para_preencher:
         df[cp] = df[cp].ffill()
@@ -84,19 +89,17 @@ if dict_abas:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # 5. Configuração de largura (Auto-ajuste e Congelamento)
+    # 5. Configuração de largura e Congelamento (Pinned)
     config_colunas = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
         "Item": st.column_config.TextColumn("Item", pinned="left"),
-        "Local": st.column_config.TextColumn("Local", pinned="left"), # Congela Local também
-        "Categoria": st.column_config.TextColumn("Categoria"),
+        "Local": st.column_config.TextColumn("Local", pinned="left"),
     }
     
-    # Mantém colunas numéricas compactas
     for cn in col_nums:
         config_colunas[cn] = st.column_config.NumberColumn(cn, format="%d")
 
-    # Identifica coluna de cor
+    # Identifica coluna de cor (Saldo)
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
     # EXIBIÇÃO FINAL
@@ -108,4 +111,4 @@ if dict_abas:
     )
 
 else:
-    st.info("💡 Sincronizando com a nuvem... A aba de operação interna (Entrada/Saída) está oculta por segurança.")
+    st.info("💡 Sincronizando com a nuvem...")
