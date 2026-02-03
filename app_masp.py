@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
 def destacar_estoque(valor):
     try:
@@ -29,7 +29,7 @@ def carregar_dados_seguro(url):
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- CABEÇALHO LIMPO ---
+# --- CABEÇALHO ---
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 st.markdown("*Sistema de Monitoramento Online - Espaço Lina Bo Bardi*")
 
@@ -48,7 +48,7 @@ if dict_abas:
     # 1. Limpeza de nomes de colunas
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. Tratamento de células mescladas (ffill na Categoria)
+    # 2. Tratamento de células mescladas
     col_cat_nome = [c for c in df.columns if 'Categoria' in c]
     if col_cat_nome:
         df[col_cat_nome] = df[col_cat_nome].ffill()
@@ -79,23 +79,24 @@ if dict_abas:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # --- 4. CONFIGURAÇÃO DE LARGURA DAS COLUNAS (AJUSTE FINO) ---
+    # --- 4. CONFIGURAÇÃO DE LARGURA (AUTO-AJUSTE) ---
+    # Removi os tamanhos fixos ('large', 'medium') para o Streamlit calcular o menor espaço possível
     config_colunas = {
-        "Ítem": st.column_config.TextColumn("Ítem", width="large", pinned=True),
-        "Item": st.column_config.TextColumn("Item", width="large", pinned=True),
-        "Categoria": st.column_config.TextColumn("Categoria", width="medium"),
-        "Marca": st.column_config.TextColumn("Marca", width="medium"),
-        "Condição": st.column_config.TextColumn("Condição", width="small"),
+        "Ítem": st.column_config.TextColumn("Ítem", pinned=True),
+        "Item": st.column_config.TextColumn("Item", pinned=True),
+        "Categoria": st.column_config.TextColumn("Categoria"),
+        "Marca": st.column_config.TextColumn("Marca"),
     }
     
-    # Todas as colunas numéricas ficam com largura pequena para caber na tela
+    # Colunas numéricas continuam pequenas para otimizar espaço
     for cn in col_nums:
-        config_colunas[cn] = st.column_config.NumberColumn(cn, width="small", format="%d")
+        config_colunas[cn] = st.column_config.NumberColumn(cn, format="%d")
 
     # Identifica coluna de cor
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
     # EXIBIÇÃO FINAL
+    # Ao não definir larguras fixas, o Streamlit tenta comprimir as colunas ao tamanho do texto
     st.dataframe(
         df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
         use_container_width=True, 
