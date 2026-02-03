@@ -5,8 +5,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
-# LINK DE PUBLICAÇÃO (Mais estável para o Streamlit Cloud)
-# Ele usa o seu ID de planilha com o comando de publicação direta
+# --- LINK DE PUBLICAÇÃO COMPLETO (CORRIGIDO) ---
 URL_PUB = "https://docs.google.com"
 
 def destacar_estoque(valor):
@@ -45,11 +44,10 @@ if dict_abas:
     aba = st.sidebar.selectbox("Selecione a Visualização:", list(dict_abas.keys()))
     df = dict_abas[aba].copy()
 
-    # 1. LIMPEZA DE CABEÇALHOS (Resolve Ítem com acento e espaços)
+    # 1. LIMPEZA DE CABEÇALHOS
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. TRATAMENTO DE CÉLULAS MESCLADAS
-    # Identifica onde está a Categoria (mesmo sendo a 2ª coluna agora)
+    # 2. TRATAMENTO DE CÉLULAS MESCLADAS (CIRÚRGICO)
     col_cat = [c for c in df.columns if 'Categoria' in c]
     if col_cat:
         df[col_cat[0]] = df[col_cat[0]].ffill()
@@ -69,7 +67,7 @@ if dict_abas:
         if cat_sel != "Todas":
             df = df[df[col_cat[0]] == cat_sel]
 
-    # 5. BARRA DE BUSCA (Busca em qualquer coluna: Item, Marca, etc)
+    # 5. BARRA DE BUSCA
     busca = st.text_input("🔍 Digite o que procura (Item ou Marca):", "")
     if busca:
         df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
@@ -79,10 +77,10 @@ if dict_abas:
 
     # EXIBIÇÃO DA TABELA
     st.dataframe(
-        df.style.applymap(destar_estoque, subset=col_cor)
+        df.style.applymap(destacar_estoque, subset=col_cor)
                 .format({c: "{:.0f}" for c in col_nums}),
         use_container_width=True,
         height=600
     )
 else:
-    st.info("💡 Conectando ao Google Sheets... Se o erro de 'zip file' persistir, clique no botão 'Sincronizar' na lateral.")
+    st.info("💡 Conectando ao Google Sheets... Se demorar, verifique se a internet está ok.")
