@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
-URL_PUB = "https://docs.google.com"
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
 def destacar_estoque(valor):
     try:
@@ -106,3 +106,4 @@ if dict_abas:
 
 else:
     st.info("💡 Sincronizando com a nuvem... Clique em 'Sincronizar Agora' se a tabela não carregar.")
+
