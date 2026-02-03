@@ -6,9 +6,8 @@ from io import BytesIO
 # 1. Configuração da página
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
-# --- DIRETRIZ: URL CONFERIDA CARACTERE POR CARACTERE ---
+# --- DIRETRIZ: URL FIXA E CONFERIDA ---
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
-
 
 def destacar_estoque(valor):
     try:
@@ -33,10 +32,10 @@ def carregar_dados_seguro(url):
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- TOPO COM LOGO DO MASP (PROPORÇÃO AJUSTADA) ---
-c_logo, c_tit = st.columns([1, 6]) 
+# --- TOPO COM LOGO DO MASP E TÍTULO ---
+c_logo, c_tit = st.columns([1, 5]) 
 with c_logo:
-    # URL pública estável do logo do MASP
+    # URL estável do logo do MASP
     st.image("https://upload.wikimedia.org", width=120)
 with c_tit:
     st.title("Gestão de Iluminação MASP - Lina")
@@ -81,7 +80,7 @@ if dict_abas:
         df = df[mask]
 
     with col_btn:
-        st.write("##") # Alinhamento visual com o campo de busca
+        st.write("##") # Alinhamento visual
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name=aba_sel)
@@ -106,7 +105,6 @@ if dict_abas:
 
     # EXIBIÇÃO FINAL
     if col_cor:
-        # Usando .map no Styler (padrão Pandas atualizado)
         st.dataframe(
             df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
             use_container_width=True, height=600, column_config=config_colunas
