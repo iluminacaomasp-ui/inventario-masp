@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
 # --- LINK CORRIGIDO (COM O ENDEREÇO COMPLETO DA SUA PLANILHA) ---
-URL_PUB = "https://docs.google.com"
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pubhtml"
 
 def destacar_estoque(valor):
     try:
@@ -85,3 +85,4 @@ if dict_abas:
     )
 else:
     st.info("💡 Conectando ao Google Sheets... Verifique a internet ou se o link de publicação está ativo.")
+
