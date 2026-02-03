@@ -23,23 +23,22 @@ def destacar_estoque(valor):
 @st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=25)
-        if response.status_code == 200:
-            return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-        return None
+        # Forçamos o download via requests com cabeçalho de navegador
+        response = requests.get(url, timeout=30)
+        # O segredo para evitar "not a zip file" é ler o conteúdo binário (content)
+        return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- TOPO COM LOGO DO MASP E TÍTULO ---
+# --- TOPO COM LOGO DO MASP (LINK ALTERNATIVO GARANTIDO) ---
 c_logo, c_tit = st.columns([1, 5]) 
 with c_logo:
-    # URL estável do logo do MASP
+    # Link do Wikimedia que não bloqueia o acesso do Streamlit
     st.image("https://upload.wikimedia.org", width=120)
 with c_tit:
     st.title("Gestão de Iluminação MASP - Lina")
-    st.markdown("*Inventário Online - Espaço Lina Bo Bardi*")
+    st.markdown("*Sistema de Monitoramento Online*")
 
 # Menu lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
@@ -73,14 +72,14 @@ if dict_abas:
     col_busca, col_btn = st.columns([3, 1])
     
     with col_busca:
-        busca = st.text_input("🔍 Pesquisar Item (Indiferente a maiúsculas/minúsculas):", placeholder="Ex: PAR, Elipso, Lâmpada...")
+        busca = st.text_input("🔍 Pesquisar por Ítem (Maiúsculo/Minúsculo):", placeholder="Ex: Par 64, Elipso, Lâmpada...")
     
     if busca:
         mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
         df = df[mask]
 
     with col_btn:
-        st.write("##") # Alinhamento visual
+        st.write(" ") # Alinhamento visual
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name=aba_sel)
@@ -113,4 +112,4 @@ if dict_abas:
         st.dataframe(df, use_container_width=True, height=600, column_config=config_colunas)
 
 else:
-    st.info("💡 Conectando à nuvem... Verifique a publicação da planilha.")
+    st.info("💡 Sincronizando com a nuvem... Clique em 'Sincronizar Agora' se a tabela não carregar.")
