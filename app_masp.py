@@ -6,9 +6,8 @@ from io import BytesIO
 # Configuração da página
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
-# --- LINK CORRIGIDO (COM O ENDEREÇO COMPLETO DA SUA PLANILHA) ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pubhtml"
-
+# --- LINK CORRIGIDO E COMPLETO ---
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 def destacar_estoque(valor):
     try:
         num = float(valor)
@@ -47,7 +46,7 @@ if dict_abas:
     # 2. TRATAMENTO DE CÉLULAS MESCLADAS
     col_cat = [c for c in df.columns if 'Categoria' in c]
     if col_cat:
-        df[col_cat[0]] = df[col_cat[0]].ffill()
+        df[col_cat] = df[col_cat].ffill()
 
     # 3. IDENTIFICA COLUNAS NUMÉRICAS
     palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
@@ -59,17 +58,19 @@ if dict_abas:
     # 4. FILTRO DE CATEGORIA NA LATERAL
     if col_cat:
         st.sidebar.markdown("---")
-        lista_cats = ["Todas"] + sorted(df[col_cat[0]].dropna().unique().tolist())
+        # Pega a primeira coluna que contém 'Categoria' no nome
+        nome_col_cat = col_cat[0]
+        lista_cats = ["Todas"] + sorted(df[nome_col_cat].dropna().unique().tolist())
         cat_sel = st.sidebar.selectbox("Filtrar por Categoria:", lista_cats)
         if cat_sel != "Todas":
-            df = df[df[col_cat[0]] == cat_sel]
+            df = df[df[nome_col_cat] == cat_sel]
 
-    # --- 5. BUSCA INTELIGENTE (Indiferente a Maiúsculas/Minúsculas) ---
+    # --- 5. BUSCA INTELIGENTE (Ignora Maiúsculas/Minúsculas) ---
     st.markdown("### 🔍 Pesquisar por Ítem")
     busca = st.text_input("Digite o nome do equipamento:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
 
     if busca:
-        # case=False garante que ignore maiúsculas/minúsculas
+        # Busca em todas as colunas de texto, case=False ignora maiúsculas/minúsculas
         mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
         df = df[mask]
 
@@ -84,5 +85,4 @@ if dict_abas:
         height=600
     )
 else:
-    st.info("💡 Conectando ao Google Sheets... Verifique a internet ou se o link de publicação está ativo.")
-
+    st.info("💡 Conectando ao Google Sheets... Aguarde um momento.")
