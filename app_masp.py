@@ -3,9 +3,10 @@ import pandas as pd
 import requests
 from io import BytesIO
 
+# Configuração da página
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide")
 
-# --- LINK DE PUBLICAÇÃO COMPLETO (CORRIGIDO) ---
+# --- LINK CORRIGIDO (COM O ENDEREÇO COMPLETO DA SUA PLANILHA) ---
 URL_PUB = "https://docs.google.com"
 
 def destacar_estoque(valor):
@@ -16,13 +17,12 @@ def destacar_estoque(valor):
         return ''
     except: return ''
 
-@st.cache_data(ttl=20) # Atualiza a cada 20 segundos
+@st.cache_data(ttl=20)
 def carregar_dados_blindado(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=25)
         if response.status_code == 200:
-            # Lê todas as abas (Estoque, Utilizado, etc)
             return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
         return None
     except Exception as e:
@@ -31,23 +31,20 @@ def carregar_dados_blindado(url):
 
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 
-# Botão de atualização na lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
 
-# --- CARREGAMENTO ---
 dict_abas = carregar_dados_blindado(URL_PUB)
 
 if dict_abas:
-    # Menu para escolher as abas
     aba = st.sidebar.selectbox("Selecione a Visualização:", list(dict_abas.keys()))
     df = dict_abas[aba].copy()
 
     # 1. LIMPEZA DE CABEÇALHOS
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. TRATAMENTO DE CÉLULAS MESCLADAS (CIRÚRGICO)
+    # 2. TRATAMENTO DE CÉLULAS MESCLADAS
     col_cat = [c for c in df.columns if 'Categoria' in c]
     if col_cat:
         df[col_cat[0]] = df[col_cat[0]].ffill()
@@ -67,10 +64,14 @@ if dict_abas:
         if cat_sel != "Todas":
             df = df[df[col_cat[0]] == cat_sel]
 
-    # 5. BARRA DE BUSCA
-    busca = st.text_input("🔍 Digite o que procura (Item ou Marca):", "")
+    # --- 5. BUSCA INTELIGENTE (Indiferente a Maiúsculas/Minúsculas) ---
+    st.markdown("### 🔍 Pesquisar por Ítem")
+    busca = st.text_input("Digite o nome do equipamento:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
+
     if busca:
-        df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
+        # case=False garante que ignore maiúsculas/minúsculas
+        mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
+        df = df[mask]
 
     # 6. CORES NO SALDO
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
@@ -83,4 +84,4 @@ if dict_abas:
         height=600
     )
 else:
-    st.info("💡 Conectando ao Google Sheets... Se demorar, verifique se a internet está ok.")
+    st.info("💡 Conectando ao Google Sheets... Verifique a internet ou se o link de publicação está ativo.")
