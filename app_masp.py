@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+URL_PUB = "https://docs.google.com"
 
 def destacar_estoque(valor):
     try:
@@ -23,22 +23,16 @@ def destacar_estoque(valor):
 @st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
     try:
-        # Forçamos o download via requests com cabeçalho de navegador
+        # Método que funcionou: leitura binária direta do conteúdo
         response = requests.get(url, timeout=30)
-        # O segredo para evitar "not a zip file" é ler o conteúdo binário (content)
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- TOPO COM LOGO DO MASP (LINK ALTERNATIVO GARANTIDO) ---
-c_logo, c_tit = st.columns([1, 5]) 
-with c_logo:
-    # Link do Wikimedia que não bloqueia o acesso do Streamlit
-    st.image("https://upload.wikimedia.org", width=120)
-with c_tit:
-    st.title("Gestão de Iluminação MASP - Lina")
-    st.markdown("*Sistema de Monitoramento Online*")
+# --- CABEÇALHO SEM LOGO ---
+st.title("🏛️ Gestão de Iluminação MASP - Lina")
+st.markdown("*Sistema de Monitoramento Online - Espaço Lina Bo Bardi*")
 
 # Menu lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
@@ -69,7 +63,7 @@ if dict_abas:
     st.markdown("---")
     
     # Barra de Busca e Botão de Download
-    col_busca, col_btn = st.columns([3, 1])
+    col_busca, col_btn = st.columns([4, 1]) # Proporção para a busca ser maior que o botão
     
     with col_busca:
         busca = st.text_input("🔍 Pesquisar por Ítem (Maiúsculo/Minúsculo):", placeholder="Ex: Par 64, Elipso, Lâmpada...")
@@ -90,10 +84,11 @@ if dict_abas:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-    # Configuração de larguras das colunas
+    # 4. Configuração de colunas e CONGELAMENTO de cabeçalho
+    # O Streamlit congela o cabeçalho automaticamente quando definimos 'height' no st.dataframe
     config_colunas = {
-        "Ítem": st.column_config.TextColumn("Ítem", width="large"),
-        "Item": st.column_config.TextColumn("Item", width="large"),
+        "Ítem": st.column_config.TextColumn("Ítem", width="large", pinned=True), # 'pinned=True' congela a coluna Ítem à esquerda
+        "Item": st.column_config.TextColumn("Item", width="large", pinned=True),
         "Categoria": st.column_config.TextColumn("Categoria", width="medium"),
     }
     for cn in col_nums:
@@ -106,10 +101,17 @@ if dict_abas:
     if col_cor:
         st.dataframe(
             df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
-            use_container_width=True, height=600, column_config=config_colunas
+            use_container_width=True, 
+            height=600, # Altura fixa para manter o cabeçalho visível ao rolar
+            column_config=config_colunas
         )
     else:
-        st.dataframe(df, use_container_width=True, height=600, column_config=config_colunas)
+        st.dataframe(
+            df, 
+            use_container_width=True, 
+            height=600, 
+            column_config=config_colunas
+        )
 
 else:
     st.info("💡 Sincronizando com a nuvem... Clique em 'Sincronizar Agora' se a tabela não carregar.")
