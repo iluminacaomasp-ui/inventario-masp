@@ -6,8 +6,9 @@ from io import BytesIO
 # 1. Configuração da página
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
-# --- URL DA PLANILHA (CONFERIDA) ---
-URL_PUB = "https://docs.google.com"
+# --- DIRETRIZ: URL CONFERIDA CARACTERE POR CARACTERE ---
+URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+
 
 def destacar_estoque(valor):
     try:
@@ -32,11 +33,11 @@ def carregar_dados_seguro(url):
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- TOPO COM LOGO DO MASP (AJUSTADO) ---
-# Definindo proporção 1 para o logo e 5 para o título para melhor alinhamento
-c_logo, c_tit = st.columns([1, 5]) 
+# --- TOPO COM LOGO DO MASP (PROPORÇÃO AJUSTADA) ---
+c_logo, c_tit = st.columns([1, 6]) 
 with c_logo:
-    st.image("https://masp.org.br", width=120)
+    # URL pública estável do logo do MASP
+    st.image("https://upload.wikimedia.org", width=120)
 with c_tit:
     st.title("Gestão de Iluminação MASP - Lina")
     st.markdown("*Inventário Online - Espaço Lina Bo Bardi*")
@@ -69,7 +70,7 @@ if dict_abas:
 
     st.markdown("---")
     
-    # Barra de Busca e Botão de Download (Ajustado)
+    # Barra de Busca e Botão de Download
     col_busca, col_btn = st.columns([3, 1])
     
     with col_busca:
@@ -80,9 +81,8 @@ if dict_abas:
         df = df[mask]
 
     with col_btn:
-        st.write(" ") # Alinhamento visual
+        st.write("##") # Alinhamento visual com o campo de busca
         output = BytesIO()
-        # O motor xlsxwriter deve estar no seu requirements.txt
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name=aba_sel)
         st.download_button(
@@ -104,8 +104,9 @@ if dict_abas:
     # Identifica coluna de cor (Saldo/Disponível)
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-    # EXIBIÇÃO FINAL COM PROTEÇÃO
+    # EXIBIÇÃO FINAL
     if col_cor:
+        # Usando .map no Styler (padrão Pandas atualizado)
         st.dataframe(
             df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
             use_container_width=True, height=600, column_config=config_colunas
