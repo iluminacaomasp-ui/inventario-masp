@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 from io import BytesIO
 
-# Configuração da página
 st.set_page_config(page_title="Sistema MASP - Lina", layout="wide")
 
 # Link de exportação direta
@@ -23,10 +22,14 @@ def carregar_dados_seguro(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=20)
         if response.status_code == 200:
+            # sheet_name=None carrega TODAS as abas
             return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-        return f"Erro na resposta do Google: {response.status_code}"
+        else:
+            st.error(f"Erro do Google: Status {response.status_code}")
+            return None
     except Exception as e:
-        return str(e)
+        st.error(f"Erro de conexão: {e}")
+        return None
 
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 
@@ -35,51 +38,56 @@ if st.sidebar.button("🔄 Atualizar Dados Agora"):
     st.cache_data.clear()
     st.rerun()
 
-try:
-    dados_abas = carregar_dados_seguro(URL_FINAL)
-    
-    if isinstance(dados_abas, dict):
-        aba = st.sidebar.selectbox("Escolha a Tabela:", list(dados_abas.keys()))
-        df = dados_abas[aba].copy()
+# --- CARREGAMENTO ---
+dados_abas = carregar_dados_seguro(URL_FINAL)
 
-        # Limpeza de nomes e tratamento de células mescladas
+if dados_abas is None:
+    st.warning("⚠️ Aguardando resposta da planilha online... Verifique se ela está compartilhada corretamente.")
+else:
+    # Menu para escolher as abas encontradas
+    opcoes_abas = list(dados_abas.keys())
+    aba = st.sidebar.selectbox("Escolha a Tabela:", opcoes_abas)
+    
+    df = dados_abas[aba].copy()
+
+    # Se a aba estiver vazia, avisa
+    if df.empty:
+        st.info(f"A aba '{aba}' parece não conter dados.")
+    else:
+        # Limpeza de nomes
         df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
         
-        # Inteligência: Só aplica o ffill (preencher células mescladas) na coluna 'Categoria' 
-        # Não importa se ela é a primeira ou a segunda coluna.
+        # Preenche apenas a categoria
         if 'Categoria' in df.columns:
             df['Categoria'] = df['Categoria'].ffill()
 
-        # Identifica colunas numéricas
+        # Identifica colunas de números por palavras-chave
         palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
         col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
         
         for col in col_nums:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        # --- FILTRO POR CATEGORIA (Opcional na Sidebar) ---
+        # Filtro de Categoria
         if 'Categoria' in df.columns:
             st.sidebar.markdown("---")
             lista_cats = ["Todas"] + sorted(df['Categoria'].dropna().unique().tolist())
-            cat_selecionada = st.sidebar.selectbox("Filtrar Categoria:", lista_cats)
-            if cat_selecionada != "Todas":
-                df = df[df['Categoria'] == cat_selecionada]
+            cat_sel = st.sidebar.selectbox("Filtrar Categoria:", lista_cats)
+            if cat_sel != "Todas":
+                df = df[df['Categoria'] == cat_sel]
 
-        # Barra de Busca focada no Item
-        busca = st.text_input("🔍 Pesquisar por Nome do Item ou Marca:", "")
+        # Barra de Busca
+        busca = st.text_input("🔍 Pesquisar por Item ou Marca:", "")
         if busca:
             df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-        # Aplica cores no Saldo
+        # Coluna de cor
         col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-        # Exibição da Tabela com a primeira coluna fixada (Item)
+        # EXIBIÇÃO
         st.dataframe(
             df.style.applymap(destacar_estoque, subset=col_cor)
                     .format({c: "{:.0f}" for c in col_nums}),
             use_container_width=True,
             height=600
         )
-
-except Exception as e:
-    st.error(f"Erro inesperado: {e}")
