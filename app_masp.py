@@ -6,8 +6,8 @@ from io import BytesIO
 # 1. Configuração da página
 st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
 
-# --- DIRETRIZ: URL CONFERIDA CARACTERE POR CARACTERE ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+# --- URL DA PLANILHA (CONFERIDA) ---
+URL_PUB = "https://docs.google.com"
 
 def destacar_estoque(valor):
     try:
@@ -32,13 +32,14 @@ def carregar_dados_seguro(url):
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- TOPO COM LOGO E TÍTULO ---
-c_logo, c_tit = st.columns([1, 4]) 
+# --- TOPO COM LOGO DO MASP (AJUSTADO) ---
+# Definindo proporção 1 para o logo e 5 para o título para melhor alinhamento
+c_logo, c_tit = st.columns([1, 5]) 
 with c_logo:
     st.image("https://masp.org.br", width=120)
 with c_tit:
     st.title("Gestão de Iluminação MASP - Lina")
-    st.markdown("*Sistema de Monitoramento em Nuvem*")
+    st.markdown("*Inventário Online - Espaço Lina Bo Bardi*")
 
 # Menu lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
@@ -55,11 +56,10 @@ if dict_abas:
     # 1. Limpeza de nomes de colunas
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # 2. Tratamento de células mescladas (ffill seguro)
+    # 2. Tratamento de células mescladas (ffill na Categoria)
     col_cat_nome = [c for c in df.columns if 'Categoria' in c]
     if col_cat_nome:
-        # Preenche a coluna categoria para que os filtros funcionem
-        df[col_cat_nome[0]] = df[col_cat_nome[0]].ffill()
+        df[col_cat_nome] = df[col_cat_nome].ffill()
 
     # 3. Identifica colunas numéricas
     palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
@@ -69,7 +69,7 @@ if dict_abas:
 
     st.markdown("---")
     
-    # Barra de Busca e Botão de Download
+    # Barra de Busca e Botão de Download (Ajustado)
     col_busca, col_btn = st.columns([3, 1])
     
     with col_busca:
@@ -80,9 +80,9 @@ if dict_abas:
         df = df[mask]
 
     with col_btn:
-        st.write(" ") # Alinhamento
+        st.write(" ") # Alinhamento visual
         output = BytesIO()
-        # Necessário instalar xlsxwriter no requirements.txt
+        # O motor xlsxwriter deve estar no seu requirements.txt
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name=aba_sel)
         st.download_button(
@@ -92,7 +92,7 @@ if dict_abas:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-    # Configuração de larguras (Mapeia Item com e sem acento por segurança)
+    # Configuração de larguras das colunas
     config_colunas = {
         "Ítem": st.column_config.TextColumn("Ítem", width="large"),
         "Item": st.column_config.TextColumn("Item", width="large"),
@@ -101,16 +101,17 @@ if dict_abas:
     for cn in col_nums:
         config_colunas[cn] = st.column_config.NumberColumn(cn, width="small", format="%d")
 
-    # Identifica coluna de cor
+    # Identifica coluna de cor (Saldo/Disponível)
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-    # EXIBIÇÃO FINAL
-    st.dataframe(
-        df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
-        use_container_width=True,
-        height=600,
-        column_config=config_colunas
-    )
+    # EXIBIÇÃO FINAL COM PROTEÇÃO
+    if col_cor:
+        st.dataframe(
+            df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
+            use_container_width=True, height=600, column_config=config_colunas
+        )
+    else:
+        st.dataframe(df, use_container_width=True, height=600, column_config=config_colunas)
 
 else:
-    st.info("💡 Conectando à nuvem... Verifique se a planilha está publicada como Excel.")
+    st.info("💡 Conectando à nuvem... Verifique a publicação da planilha.")
