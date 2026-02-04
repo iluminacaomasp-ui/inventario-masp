@@ -8,8 +8,7 @@ st.set_page_config(page_title="Inventário MASP", layout="wide", page_icon="🏛
 
 # --- URLs DE PUBLICAÇÃO (Ajuste o link do Pietro quando tiver) ---
 URL_LINA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
-URL_PIETRO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBLmJrDLvDMoz91hpFNLgrJ3pgl_LoenIGP_ptZxxrch3cK9FCIaLkUx4ecD0EMFtWWBcsax7asJDc/pub?output=xlsx
-"
+URL_PIETRO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBLmJrDLvDMoz91hpFNLgrJ3pgl_LoenIGP_ptZxxrch3cK9FCIaLkUx4ecD0EMFtWWBcsax7asJDc/pub?output=xlsx"
 
 # --- PALETA DE CORES DINÂMICA ---
 # Cores pastéis para os locais (serão atribuídas por ordem de aparecimento)
@@ -92,4 +91,5 @@ else:
             column_config={"Ítem": st.column_config.TextColumn("Ítem", pinned="left"), 
                            "Local": st.column_config.TextColumn("Local", pinned="left")}
         )
+
 
