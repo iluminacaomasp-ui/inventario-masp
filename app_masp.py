@@ -64,7 +64,7 @@ if dict_abas:
     abas_v = ["🏠 Início"] + [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
     aba_sel = st.sidebar.radio("Navegação:", abas_v)
 
-       # --- TELA DE BOAS-VINDAS ---
+           # --- TELA DE BOAS-VINDAS ---
     if aba_sel == "🏠 Início":
         # Título focado apenas na marca MASP
         st.markdown("<h1 style='color: #E30613; font-size: 60px; margin-bottom: 0;'>MASP</h1>", unsafe_allow_html=True)
@@ -112,6 +112,7 @@ if dict_abas:
         )
 else:
     st.info("💡 Carregando dados do servidor...")
+
 
 
 
