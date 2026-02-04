@@ -17,6 +17,7 @@ CORES_ITENS = {
     "LENTE": "#EAF2F8", "BARN": "#EBEDEF", "REFLETOR": "#F4F6F7"
 }
 
+# --- FUNÇÕES DE SUPORTE ---
 def gerar_estilo_dinamico(df, aba_atual):
     aba_upper = aba_atual.upper()
     if any(x in aba_upper for x in ["UTILIZADO", "SOLICITADO"]):
@@ -49,47 +50,57 @@ def carregar_dados(url):
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except: return None
 
+# --- LÓGICA DE ESTADO (SESSION STATE) ---
+if 'visualizando' not in st.session_state:
+    st.session_state.visualizando = False
+
 # --- MENU LATERAL ---
 st.sidebar.title("🏛️ Menu Principal")
 
-# Botão de Ajuda/Início
-exibir_inicio = st.sidebar.button("📖 Instruções de Uso")
+if st.sidebar.button("📖 Instruções de Uso"):
+    st.session_state.visualizando = False
 
-edificio = st.sidebar.selectbox("Selecione o Edifício:", ["Lina Bo Bardi", "Pietro"])
-url_atual = URL_LINA if edificio == "Lina Bo Bardi" else URL_PIETRO
+edificio_opt = st.sidebar.selectbox(
+    "Selecione o Edifício para Consultar:", 
+    ["--- Selecione ---", "Lina Bo Bardi", "Pietro"]
+)
 
-if st.sidebar.button("🔄 Sincronizar Dados"):
-    st.cache_data.clear()
-    st.rerun()
+if edificio_opt != "--- Selecione ---":
+    st.session_state.visualizando = True
+    url_atual = URL_LINA if edificio_opt == "Lina Bo Bardi" else URL_PIETRO
+    if st.sidebar.button("🔄 Sincronizar Dados"):
+        st.cache_data.clear()
+        st.rerun()
+else:
+    st.session_state.visualizando = False
 
-dict_abas = carregar_dados(url_atual)
+# --- TELA DE BOAS-VINDAS ---
+if not st.session_state.visualizando:
+    st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
+    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados. Alterações devem ser feitas via planilhas oficiais.")
+    
+    st.markdown("""
+    Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
+    
+    ### Como usar o sistema:
+    1. **Selecione a Unidade:** No menu à esquerda, escolha qual edifício deseja consultar.
+    2. **Navegue pelas Tabelas:** 
+        * **Estoque:** Quantidade total disponível.
+        * **Utilizado:** Onde os equipamentos estão agora.
+        * **Solicitado:** Planejamento de exposições.
+    3. **Busca Rápida:** Use a lupa acima das tabelas para filtrar.
+    
+    ---
+    """)
+    st.markdown("<p style='font-style: italic; color: #888; font-size: 0.9em; text-align: right;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
 
-if dict_abas:
-    # Removemos o "Início" da lista de rádio para ele não aparecer como aba
-    abas_v = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
-    aba_sel = st.sidebar.radio("Navegação:", abas_v)
-
-    # --- TELA DE BOAS-VINDAS (Ativada pelo botão de Ajuda ou se nada estiver carregado) ---
-    if exibir_inicio:
-        st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
-        st.markdown("""
-        Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
+# --- EXIBIÇÃO DAS TABELAS ---
+elif st.session_state.visualizando:
+    dict_abas = carregar_dados(url_atual)
+    if dict_abas:
+        abas_v = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
+        aba_sel = st.sidebar.radio("Navegação:", abas_v)
         
-        ### Como usar o sistema:
-        1. **Selecione a Unidade:** No menu à esquerda, você pode trocar entre o edifício *Lina* e o *Pietro*.
-        2. **Navegue pelas Tabelas:** 
-            * **Estoque:** Confira a quantidade total de equipamentos disponíveis na sala de estoque.
-            * **Utilizado:** Veja exatamente onde cada refletor ou lente está montado no museu agora.
-            * **Solicitado:** Consulte o planejamento das próximas exposições e veja se há material disponível.
-        3. **Busca Rápida:** Use a lupa acima de cada tabela para filtrar por nome de equipamento ou andar.
-        
-        ---
-        """)
-        # Assinatura Profissional e Discreta
-        st.markdown("<p style='font-style: italic; color: #888; font-size: 0.9em; text-align: right;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
-
-    # --- EXIBIÇÃO DAS TABELAS ---
-    else:
         df = dict_abas[aba_sel].copy()
         df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
         df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
@@ -100,7 +111,7 @@ if dict_abas:
         for col in col_nums: 
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        st.title(f"🏛️ {edificio} - {aba_sel}")
+        st.title(f"🏛️ {edificio_opt} - {aba_sel}")
         busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
         if busca:
             df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
@@ -113,5 +124,3 @@ if dict_abas:
                            "Item": st.column_config.TextColumn("Item", pinned="left"),
                            "Local": st.column_config.TextColumn("Local", pinned="left")}
         )
-else:
-    st.info("💡 Carregando dados...")
