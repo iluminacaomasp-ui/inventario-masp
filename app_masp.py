@@ -10,13 +10,12 @@ st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_ico
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
 
-def destacar_estoque(valor):
+def destacar_texto_estoque(valor):
     try:
         num = float(valor)
-        if num == 0: 
-            return 'background-color: #ff4b4b; color: white;' 
-        elif num < 5: 
-            return 'background-color: #f1c40f; color: black;' 
+        # Se for 0 ou negativo, apenas a fonte fica vermelha e em negrito
+        if num <= 0: 
+            return 'color: #ff4b4b; font-weight: bold;'
         return ''
     except:
         return ''
@@ -52,7 +51,7 @@ if dict_abas:
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
-    cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['categoria', 'local'])]
+    cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
     for cp in cols_fill:
         df[cp] = df[cp].ffill()
 
@@ -84,22 +83,23 @@ if dict_abas:
 
     # 3. Configuração de colunas
     config_colunas = {
-        "Ítem": st.column_config.TextColumn("Ítem", pinned=True),
-        "Item": st.column_config.TextColumn("Item", pinned=True),
-        "Local": st.column_config.TextColumn("Local", pinned=True),
+        "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
+        "Item": st.column_config.TextColumn("Item", pinned="left"),
+        "Local": st.column_config.TextColumn("Local", pinned="left"),
     }
     for cn in col_nums:
         config_colunas[cn] = st.column_config.NumberColumn(cn, format="%d")
 
+    # Identifica coluna de cor (Saldo/Disponível)
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-    # EXIBIÇÃO FINAL (Agora com hide_index=True)
+    # EXIBIÇÃO FINAL
     st.dataframe(
-        df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
+        df.style.map(destacar_texto_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
         use_container_width=True, 
         height=600, 
         column_config=config_colunas,
-        hide_index=True  # <--- Remove a numeração da esquerda
+        hide_index=True
     )
 
 else:
