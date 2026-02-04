@@ -10,128 +10,76 @@ st.set_page_config(page_title="Inventário MASP", layout="wide", page_icon="🏛
 URL_LINA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 URL_PIETRO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBLmJrDLvDMoz91hpFNLgrJ3pgl_LoenIGP_ptZxxrch3cK9FCIaLkUx4ecD0EMFtWWBcsax7asJDc/pub?output=xlsx"
 
-
 # --- PALETA DE CORES ---
 PALETA_PASTEL_LOCAIS = ["#E8F4F8", "#FFF9E6", "#EAFAF1", "#F5EEF8", "#FDF2E9", "#EBF5FB", "#F4F6F7", "#FEF9E7"]
-CORES_ITENS = {
-    "PAR 30": "#E8F4F8", "AR 111": "#FFF9E6", "ELIPSO": "#F5EEF8",
-    "LENTE": "#EAF2F8", "BARN": "#EBEDEF", "REFLETOR": "#F4F6F7"
-}
-
-# --- FUNÇÕES DE ESTILO ---
-def gerar_estilo_dinamico(df, aba_atual):
-    aba_upper = aba_atual.upper()
-    if any(x in aba_upper for x in ["UTILIZADO", "SOLICITADO"]):
-        if 'Local' in df.columns:
-            locais_unicos = df['Local'].unique()
-            mapeamento = {local: PALETA_PASTEL_LOCAIS[i % len(PALETA_PASTEL_LOCAIS)] for i, local in enumerate(locais_unicos)}
-            return df.style.apply(lambda row: [f"background-color: {mapeamento.get(row['Local'], 'white')}; color: black;" for _ in row], axis=1)
-    elif "ESTOQUE" in aba_upper:
-        def cor_estoque(row):
-            item = str(row.get('Ítem', row.get('Item', ''))).upper()
-            bg = "white"
-            for chave, cor in CORES_ITENS.items():
-                if chave in item: bg = cor; break
-            return [f"background-color: {bg}; color: black;" for _ in row]
-        return df.style.apply(cor_estoque, axis=1)
-    return df.style.set_properties(**{'background-color': 'white', 'color': 'black'})
+CORES_ITENS = {"PAR 30": "#E8F4F8", "AR 111": "#FFF9E6", "ELIPSO": "#F5EEF8", "LENTE": "#EAF2F8", "BARN": "#EBEDEF", "REFLETOR": "#F4F6F7"}
 
 def destacar_alertas(valor):
     v_str = str(valor)
-    if "Falta" in v_str or "❌" in v_str or (v_str.startswith('-') and any(c.isdigit() for c in v_str)):
-        return 'color: #ff4b4b; font-weight: bold;'
-    if "✅" in v_str:
-        return 'color: #2ecc71; font-weight: bold;'
+    if "Falta" in v_str or "❌" in v_str or "-" in v_str: return 'color: #ff4b4b; font-weight: bold;'
+    if "✅" in v_str: return 'color: #2ecc71; font-weight: bold;'
     return ''
 
-# --- ENCAIXE DA NOVA FUNÇÃO DE CARREGAMENTO (FORÇAR ATUALIZAÇÃO) ---
-@st.cache_data(ttl=2) 
+@st.cache_data(ttl=10)
 def carregar_dados(url):
     try:
-        # Marcador de tempo para forçar o Google a processar as fórmulas
-        timestamp = str(pd.Timestamp.now().timestamp())
-        url_final = f"{url}&cache_bust={timestamp}"
-        response = requests.get(url_final, timeout=30)
-        # engine='openpyxl' lê o resultado final da célula (o "OK" ou "Falta")
+        response = requests.get(url, timeout=30)
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-    except:
-        return None
+    except: return None
 
-# --- LÓGICA DE ESTADO ---
-if 'visualizando' not in st.session_state:
-    st.session_state.visualizando = False
-
-# --- MENU LATERAL ---
+# --- INTERFACE ---
 st.sidebar.title("🏛️ Menu Principal")
+edificio_opt = st.sidebar.selectbox("Selecione o Edifício:", ["--- Selecione ---", "Lina Bo Bardi", "Pietro"])
 
-if st.sidebar.button("📖 Instruções de Uso"):
-    st.session_state.visualizando = False
-
-edificio_opt = st.sidebar.selectbox(
-    "Selecione o Edifício para Consultar:", 
-    ["--- Selecione ---", "Lina Bo Bardi", "Pietro"]
-)
-
-if edificio_opt != "--- Selecione ---":
-    st.session_state.visualizando = True
-    url_atual = URL_LINA if edificio_opt == "Lina Bo Bardi" else URL_PIETRO
-    if st.sidebar.button("🔄 Sincronizar Dados"):
-        st.cache_data.clear()
-        st.rerun()
-else:
-    st.session_state.visualizando = False
-
-# --- TELA DE BOAS-VINDAS ---
-if not st.session_state.visualizando:
+if edificio_opt == "--- Selecione ---":
     st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
-    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados. As informações são sincronizadas em tempo real.")
+    st.info("⚠️ Este aplicativo é para consulta. Selecione um edifício para começar.")
+    st.markdown("<p style='text-align: right; color: gray;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
+else:
+    url = URL_LINA if edificio_opt == "Lina Bo Bardi" else URL_PIETRO
+    dict_abas = carregar_dados(url)
     
-    st.markdown("""
-    Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
-    
-    ### Como usar o sistema:
-    1. **Selecione a Unidade:** No menu à esquerda para carregar os dados.
-    2. **Aba Solicitado:** Planeje inserindo as quantidades na planilha e confira aqui a disponibilidade.
-    3. **Aba Estoque:** Verifique o material disponível na sala de estoque.
-    4. **Aba Utilizado:** Veja a distribuição atual dos equipamentos.
-    ---
-    """)
-    st.markdown("<p style='font-style: italic; color: #888; font-size: 0.9em; text-align: right;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
-
-# --- EXIBIÇÃO DAS TABELAS ---
-elif st.session_state.visualizando:
-    dict_abas = carregar_dados(url_atual)
     if dict_abas:
         abas_v = [a for a in dict_abas.keys() if any(x in a.upper() for x in ["ESTOQUE", "UTILIZADO", "SOLICITADO"])]
+        aba_sel = st.sidebar.radio("Navegação:", abas_v)
         
-        if not abas_v:
-            st.warning("Nenhuma aba válida encontrada.")
+        if "SOLICITADO" in aba_sel.upper():
+            st.title(f"🚀 Simulador de Projeto - {edificio_opt}")
+            
+            # --- LÓGICA DO SIMULADOR ---
+            df_est = dict_abas['Estoque'].copy()
+            df_est.columns = [str(c).strip() for c in df_est.columns]
+            
+            with st.expander("🔍 Abrir Calculadora de Simulação", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    item_simu = st.selectbox("Selecione o Equipamento:", df_est['Item'].unique())
+                with col2:
+                    qtd_simu = st.number_input("Quantidade Necessária:", min_value=0, step=1)
+                
+                # Busca o saldo no estoque real da planilha
+                saldo_refletor = df_est[(df_est['Item'] == item_simu) & (df_est['Categoria'] == 'Refletor')]['Saldo'].sum()
+                saldo_lampada = df_est[(df_est['Item'] == item_simu) & (df_est['Categoria'] == 'Lâmpada')]['Saldo'].sum()
+                
+                if qtd_simu > 0:
+                    c1, c2 = st.columns(2)
+                    # Resultado Refletor
+                    if saldo_refletor >= qtd_simu:
+                        c1.success(f"Refletor: ✅ Disponível (Saldo: {saldo_refletor})")
+                    else:
+                        c1.error(f"Refletor: ⚠️ Falta {int(qtd_simu - saldo_refletor)} unidades")
+                    
+                    # Resultado Lâmpada (Se houver categoria lâmpada para o item)
+                    if saldo_lampada > 0:
+                        if saldo_lampada >= qtd_simu:
+                            c2.success(f"Lâmpada: ✅ Disponível (Saldo: {saldo_lampada})")
+                        else:
+                            c2.error(f"Lâmpada: ⚠️ Falta {int(qtd_simu - saldo_lampada)} unidades")
+            
+            st.markdown("---")
+            st.subheader("Tabela de Planejamento (Planilha)")
+            st.dataframe(dict_abas[aba_sel], use_container_width=True, hide_index=True)
+
         else:
-            aba_sel = st.sidebar.radio("Navegação:", abas_v)
-            
-            df = dict_abas[aba_sel].copy()
-            df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
-            df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
-            
-            for cp in [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]: 
-                df[cp] = df[cp].ffill()
-            
-            col_nums = [c for c in df.columns if any(p in c.lower() for p in ['saldo', 'quant', 'total', 'uso', 'manut', 'necessária'])]
-            for col in col_nums: 
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-
             st.title(f"🏛️ {edificio_opt} - {aba_sel}")
-            busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
-            if busca:
-                df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
-
-            estilo_final = gerar_estilo_dinamico(df, aba_sel).map(destacar_alertas)
-            st.dataframe(
-                estilo_final.format({c: "{:d}" for c in col_nums if c in df.columns}), 
-                use_container_width=True, height=600, hide_index=True,
-                column_config={
-                    "Ítem": st.column_config.TextColumn("Ítem", pinned="left"), 
-                    "Item": st.column_config.TextColumn("Item", pinned="left"),
-                    "Local": st.column_config.TextColumn("Local", pinned="left")
-                }
-            )
+            st.dataframe(dict_abas[aba_sel], use_container_width=True, hide_index=True)
