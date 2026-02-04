@@ -7,8 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Inventário MASP", layout="wide", page_icon="🏛️")
 
 # --- URLs DE PUBLICAÇÃO (Ajuste o link do Pietro quando tiver) ---
-URL_LINA = ""https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
-"
+URL_LINA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 URL_PIETRO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBLmJrDLvDMoz91hpFNLgrJ3pgl_LoenIGP_ptZxxrch3cK9FCIaLkUx4ecD0EMFtWWBcsax7asJDc/pub?output=xlsx
 "
 
@@ -93,3 +92,4 @@ else:
             column_config={"Ítem": st.column_config.TextColumn("Ítem", pinned="left"), 
                            "Local": st.column_config.TextColumn("Local", pinned="left")}
         )
+
