@@ -46,13 +46,11 @@ def carregar_dados(url):
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except: return None
 
-# --- INICIALIZAÇÃO DA CESTA DE SIMULAÇÃO ---
 if 'cesta' not in st.session_state:
     st.session_state.cesta = []
 if 'visualizando' not in st.session_state:
     st.session_state.visualizando = False
 
-# --- MENU LATERAL ---
 st.sidebar.title("🏛️ Menu Principal")
 if st.sidebar.button("📖 Instruções de Uso"):
     st.session_state.visualizando = False
@@ -68,14 +66,11 @@ if edificio_opt != "--- Selecione ---":
 else:
     st.session_state.visualizando = False
 
-# --- TELA DE BOAS-VINDAS ---
 if not st.session_state.visualizando:
     st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
-    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados.")
-    st.markdown("### Como usar o sistema:\n1. Selecione a Unidade no menu lateral.\n2. Use o **Simulador** para planejar montagens acumuladas.")
+    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** e **simulação**.")
     st.markdown("<p style='text-align: right; font-style: italic; color: #888;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
 
-# --- EXIBIÇÃO DAS TABELAS ---
 elif st.session_state.visualizando:
     dict_abas = carregar_dados(url_atual)
     if dict_abas:
@@ -86,51 +81,61 @@ elif st.session_state.visualizando:
         df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
         for cp in [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]: df[cp] = df[cp].ffill()
         
-        # --- LÓGICA DO SIMULADOR ACUMULADO ---
         if "SIMULADOR" in aba_sel.upper():
-            st.title(f"🚀 Planejamento Semanal - {edificio_opt}")
+            st.title(f"🚀 Simulador de Projeto Acumulado - {edificio_opt}")
             df_est = dict_abas['Estoque'].copy()
             df_est.columns = [str(c).strip() for c in df_est.columns]
             
-            with st.expander("🛠️ ADICIONAR AO PROJETO ATUAL", expanded=True):
+            # --- ÁREA DE TESTE ---
+            with st.expander("🛠️ TESTAR NOVOS ITENS (Simulação Temporária)", expanded=True):
                 c1, c2, c3 = st.columns([1.5, 2, 1])
-                local_simu = c1.selectbox("Local da Montagem:", df['Local'].unique())
+                local_simu = c1.selectbox("Local Sugerido:", df['Local'].unique())
                 item_simu = c2.selectbox("Equipamento:", df_est['Item'].unique())
                 qtd_simu = c3.number_input("Qtd:", min_value=1, step=1)
-                
-                if st.button("➕ Adicionar à Cesta"):
+                if st.button("➕ Adicionar à Simulação"):
                     st.session_state.cesta.append({"Local": local_simu, "Item": item_simu, "Qtd": qtd_simu})
             
+            # --- TABELA DE SIMULAÇÃO ATUAL ---
             if st.session_state.cesta:
-                st.subheader("📋 Resumo do Projeto (Acumulado)")
+                st.subheader("📋 Simulação em Curso (Considerando Reservas Confirmadas)")
                 df_cesta = pd.DataFrame(st.session_state.cesta)
                 
-                # Cálculo de disponibilidade real
-                def calcular_status(row):
+                def calcular_status_acumulado(row):
                     item = row['Item']
-                    total_pedido = df_cesta[df_cesta['Item'] == item]['Qtd'].sum()
+                    total_simulado = df_cesta[df_cesta['Item'] == item]['Qtd'].sum()
+                    # Considera a reserva que já está na aba Simulador do Sheets (coluna 'Quantidade')
+                    total_reservado_sheets = df[df['Item'] == item]['Quantidade'].sum()
+                    demanda_total = total_simulado + total_reservado_sheets
+                    
                     s_ref = df_est[(df_est['Item'] == item) & (df_est['Categoria'] == 'Refletor')]['Saldo'].sum()
                     s_lam = df_est[(df_est['Item'] == item) & (df_est['Categoria'] == 'Lâmpada')]['Saldo'].sum()
                     
                     res = []
                     if s_ref > 0:
-                        if total_pedido <= s_ref: res.append(f"✅ Refletor OK ({int(s_ref)})")
-                        else: res.append(f"⚠️ Falta Refletor ({int(total_pedido - s_ref)})")
+                        dispo = s_ref - total_reservado_sheets
+                        if total_simulado <= dispo: res.append(f"✅ Refletor OK (Livre: {int(dispo)})")
+                        else: res.append(f"⚠️ Falta Refletor ({int(total_simulado - dispo)})")
                     if s_lam > 0:
-                        if total_pedido <= s_lam: res.append(f"✅ Lâmpada OK ({int(s_lam)})")
-                        else: res.append(f"⚠️ Falta Lâmpada ({int(total_pedido - s_lam)})")
+                        dispo = s_lam - total_reservado_sheets
+                        if total_simulado <= dispo: res.append(f"✅ Lâmpada OK (Livre: {int(dispo)})")
+                        else: res.append(f"⚠️ Falta Lâmpada ({int(total_simulado - dispo)})")
                     return " | ".join(res)
 
-                df_cesta['Status Acumulado'] = df_cesta.apply(calcular_status, axis=1)
+                df_cesta['Disponibilidade Real'] = df_cesta.apply(calcular_status_acumulado, axis=1)
                 st.dataframe(df_cesta.style.map(destacar_alertas), use_container_width=True, hide_index=True)
-                
-                if st.button("🗑️ Limpar Projeto"):
+                if st.button("🗑️ Limpar Simulação"):
                     st.session_state.cesta = []
                     st.rerun()
 
-        st.markdown("---")
+            st.markdown("---")
+            st.subheader("📌 Reservas Confirmadas (Dados da Planilha)")
+        
+        # Exibição padrão das tabelas
         busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
         if busca:
             df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
         st.dataframe(gerar_estilo_dinamico(df, aba_sel).map(destacar_alertas), use_container_width=True, height=500, hide_index=True)
+
+else:
+    st.info("💡 Sincronizando dados...")
