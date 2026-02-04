@@ -14,9 +14,9 @@ def destacar_estoque(valor):
     try:
         num = float(valor)
         if num == 0: 
-            return 'background-color: #ff4b4b; color: white;' # Vermelho
+            return 'background-color: #ff4b4b; color: white;' 
         elif num < 5: 
-            return 'background-color: #f1c40f; color: black;' # Amarelo
+            return 'background-color: #f1c40f; color: black;' 
         return ''
     except:
         return ''
@@ -34,7 +34,6 @@ def carregar_dados_seguro(url):
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
 st.markdown("*Sistema de Monitoramento Online - Espaço Lina Bo Bardi*")
 
-# Menu lateral
 if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
     st.rerun()
@@ -42,7 +41,6 @@ if st.sidebar.button("🔄 Sincronizar Agora"):
 dict_abas = carregar_dados_seguro(URL_PUB)
 
 if dict_abas:
-    # Lógica para esconder abas auxiliares
     lista_abas_total = list(dict_abas.keys())
     termos_ocultos = ["ENTRADA", "SAÍDA", "AUX", "CONFIG"]
     lista_visivel = [a for a in lista_abas_total if not any(t in a.upper() for t in termos_ocultos)]
@@ -50,17 +48,15 @@ if dict_abas:
     aba_sel = st.sidebar.radio("Selecione a Tabela:", lista_visivel)
     df = dict_abas[aba_sel].copy()
 
-    # 1. Limpeza de nomes de colunas
+    # 1. Limpeza de colunas
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
-    
-    # 2. Tratamento de células mescladas (ffill) e remoção da coluna Chave
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
     cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['categoria', 'local'])]
     for cp in cols_fill:
         df[cp] = df[cp].ffill()
 
-    # 3. Identifica colunas numéricas e remove decimais
+    # 2. Identifica colunas numéricas e remove decimais
     palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
     for col in col_nums:
@@ -69,7 +65,7 @@ if dict_abas:
     st.markdown("---")
     
     # Barra de Busca
-    busca = st.text_input("🔍 Pesquisar por Ítem (Maiúsculo/Minúsculo):", placeholder="Ex: Par 64, Elipso, Lâmpada...")
+    busca = st.text_input("🔍 Pesquisar por Ítem:", placeholder="Ex: Par 64, Elipso, Lâmpada...")
     
     if busca:
         mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
@@ -86,27 +82,25 @@ if dict_abas:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # --- 4. CONFIGURAÇÃO DE LARGURA (AUTO-AJUSTE) ---
+    # 3. Configuração de colunas
     config_colunas = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned=True),
         "Item": st.column_config.TextColumn("Item", pinned=True),
         "Local": st.column_config.TextColumn("Local", pinned=True),
     }
-    
     for cn in col_nums:
         config_colunas[cn] = st.column_config.NumberColumn(cn, format="%d")
 
-    # Identifica coluna de cor (Saldo/Disponível)
     col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
 
-    # EXIBIÇÃO FINAL
+    # EXIBIÇÃO FINAL (Agora com hide_index=True)
     st.dataframe(
         df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
         use_container_width=True, 
         height=600, 
-        column_config=config_colunas
+        column_config=config_colunas,
+        hide_index=True  # <--- Remove a numeração da esquerda
     )
 
 else:
     st.info("💡 Sincronizando com a nuvem...")
-
