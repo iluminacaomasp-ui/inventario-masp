@@ -51,6 +51,10 @@ def carregar_dados(url):
 
 # --- MENU LATERAL ---
 st.sidebar.title("🏛️ Menu Principal")
+
+# Botão de Ajuda/Início
+exibir_inicio = st.sidebar.button("📖 Instruções de Uso")
+
 edificio = st.sidebar.selectbox("Selecione o Edifício:", ["Lina Bo Bardi", "Pietro"])
 url_atual = URL_LINA if edificio == "Lina Bo Bardi" else URL_PIETRO
 
@@ -61,14 +65,13 @@ if st.sidebar.button("🔄 Sincronizar Dados"):
 dict_abas = carregar_dados(url_atual)
 
 if dict_abas:
-    abas_v = ["🏠 Início"] + [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
+    # Removemos o "Início" da lista de rádio para ele não aparecer como aba
+    abas_v = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
     aba_sel = st.sidebar.radio("Navegação:", abas_v)
 
-               # --- TELA DE BOAS-VINDAS ---
-    if aba_sel == "🏠 Início":
-        # A frase fica no estilo H1, mas o vermelho só "pinta" a palavra MASP
+    # --- TELA DE BOAS-VINDAS (Ativada pelo botão de Ajuda ou se nada estiver carregado) ---
+    if exibir_inicio:
         st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
-        
         st.markdown("""
         Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
         
@@ -77,12 +80,13 @@ if dict_abas:
         2. **Navegue pelas Tabelas:** 
             * **Estoque:** Confira a quantidade total de equipamentos disponíveis na sala de estoque.
             * **Utilizado:** Veja exatamente onde cada refletor ou lente está montado no museu agora.
-            * **Solicitado:** Consulte o planejamento das próximas exposições e veja se há material disponível (alertas em vermelho indicam falta).
+            * **Solicitado:** Consulte o planejamento das próximas exposições e veja se há material disponível.
         3. **Busca Rápida:** Use a lupa acima de cada tabela para filtrar por nome de equipamento ou andar.
         
         ---
-        *Dica: Clique em **Sincronizar Dados** no menu lateral se houver novas alterações na planilha.*
         """)
+        # Assinatura Profissional e Discreta
+        st.markdown("<p style='font-style: italic; color: #888; font-size: 0.9em; text-align: right;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
 
     # --- EXIBIÇÃO DAS TABELAS ---
     else:
@@ -110,9 +114,4 @@ if dict_abas:
                            "Local": st.column_config.TextColumn("Local", pinned="left")}
         )
 else:
-    st.info("💡 Carregando dados do servidor...")
-
-
-
-
-
+    st.info("💡 Carregando dados...")
