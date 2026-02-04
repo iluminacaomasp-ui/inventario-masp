@@ -20,7 +20,8 @@ CORES_ITENS = {
 # --- FUNÇÕES DE ESTILO ---
 def gerar_estilo_dinamico(df, aba_atual):
     aba_upper = aba_atual.upper()
-    if any(x in aba_upper for x in ["UTILIZADO", "SOLICITADO"]):
+    # ALTERAÇÃO 1: Substituído SOLICITADO por SIMULADOR na lógica de cores por local
+    if any(x in aba_upper for x in ["UTILIZADO", "SIMULADOR"]):
         if 'Local' in df.columns:
             locais_unicos = df['Local'].unique()
             mapeamento = {local: PALETA_PASTEL_LOCAIS[i % len(PALETA_PASTEL_LOCAIS)] for i, local in enumerate(locais_unicos)}
@@ -84,7 +85,7 @@ if not st.session_state.visualizando:
     
     ### Como usar o sistema:
     1. **Selecione a Unidade:** No menu à esquerda, escolha qual edifício deseja consultar.
-    2. **Aba Solicitado:** Além de consultar o planejamento, você pode simular a disponibilidade de itens no topo da página.
+    2. **Aba Simulador:** Além de consultar o planejamento, você pode simular a disponibilidade de itens no topo da página.
     3. **Aba Estoque:** Verifique a quantidade real de material disponível.
     4. **Aba Utilizado:** Veja a distribuição atual dos equipamentos.
     
@@ -96,7 +97,8 @@ if not st.session_state.visualizando:
 elif st.session_state.visualizando:
     dict_abas = carregar_dados(url_atual)
     if dict_abas:
-        abas_v = [a for a in dict_abas.keys() if any(x in a.upper() for x in ["ESTOQUE", "UTILIZADO", "SOLICITADO"])]
+        # ALTERAÇÃO 2: Substituído SOLICITADO por SIMULADOR na filtragem de abas visíveis
+        abas_v = [a for a in dict_abas.keys() if any(x in a.upper() for x in ["ESTOQUE", "UTILIZADO", "SIMULADOR"])]
         aba_sel = st.sidebar.radio("Navegação:", abas_v)
         
         df = dict_abas[aba_sel].copy()
@@ -112,8 +114,8 @@ elif st.session_state.visualizando:
 
         st.title(f"🏛️ {edificio_opt} - {aba_sel}")
 
-        # --- INTEGRAÇÃO DO SIMULADOR (APENAS NA ABA SOLICITADO) ---
-        if "SOLICITADO" in aba_sel.upper():
+        # ALTERAÇÃO 3: Substituído SOLICITADO por SIMULADOR na integração do simulador
+        if "SIMULADOR" in aba_sel.upper():
             df_est = dict_abas['Estoque'].copy()
             df_est.columns = [str(c).strip() for c in df_est.columns]
             
