@@ -19,9 +19,10 @@ CORES_LOCAIS = {
     "2º SUB-SOLO (INFERIOR)": "#FDF2E9" # Pêssego
 }
 
-# --- FUNÇÃO DE ESTILO PARA A LINHA INTEIRA (ABA SOLICITADO) ---
+# --- FUNÇÃO DE ESTILO PARA A LINHA INTEIRA (UTILIZADO E SOLICITADO) ---
 def estilo_setorizado(row, aba_atual):
-    if "SOLICITADO" in aba_atual.upper():
+    # Agora aplica para Utilizado OU Solicitado
+    if any(x in aba_atual.upper() for x in ["UTILIZADO", "SOLICITADO"]):
         local = str(row.get('Local', '')).upper()
         bg_color = "white"
         for chave, cor in CORES_LOCAIS.items():
@@ -31,13 +32,13 @@ def estilo_setorizado(row, aba_atual):
         return [f"background-color: {bg_color}; color: black;" for _ in row]
     return ["" for _ in row]
 
-# --- FUNÇÃO DE DESTAQUE DE TEXTO (STATUS/SALDO) ---
+# --- FUNÇÃO DE DESTAQUE DE TEXTO (ALERTAS) ---
 def destacar_alertas(valor):
     v_str = str(valor)
-    # Se houver "Falta", "❌" ou número negativo, texto fica Vermelho e Negrito
+    # Se houver "Falta", "❌" ou número negativo, apenas o texto fica Vermelho
     if "Falta" in v_str or "❌" in v_str or (v_str.startswith('-') and any(c.isdigit() for c in v_str)):
         return 'color: #ff4b4b; font-weight: bold;'
-    # Se houver "✅", texto fica Verde e Negrito
+    # Se houver "✅", apenas o texto fica Verde
     if "✅" in v_str:
         return 'color: #2ecc71; font-weight: bold;'
     return ''
@@ -60,6 +61,7 @@ if st.sidebar.button("🔄 Sincronizar Agora"):
 dict_abas = carregar_dados_seguro(URL_PUB)
 
 if dict_abas:
+    # Filtro de abas auxiliares
     lista_visivel = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
     aba_sel = st.sidebar.radio("Selecione a Tabela:", lista_visivel)
     df = dict_abas[aba_sel].copy()
@@ -68,10 +70,11 @@ if dict_abas:
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
-    cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['categoria', 'local'])]
+    # Preenchimento automático (ffill)
+    cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
     for cp in cols_fill: df[cp] = df[cp].ffill()
 
-    # 2. Tratamento Numérico
+    # 2. Tratamento Numérico (Inteiros puros)
     palavras_chave_num = ['saldo', 'quant', 'total', 'uso', 'manut']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave_num)]
     for col in col_nums:
@@ -83,11 +86,12 @@ if dict_abas:
         df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
     # --- 3. APLICAÇÃO DOS ESTILOS ---
-    # Primeiro a cor da linha (Fundo)
+    # Passo 1: Fundo da linha colorido pelo Local
     estilo_df = df.style.apply(estilo_setorizado, aba_atual=aba_sel, axis=1)
-    # Depois a cor do texto (Alertas)
+    # Passo 2: Apenas a cor da fonte para Alertas
     estilo_df = estilo_df.map(destacar_alertas)
 
+    # Configuração de visualização
     config = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
         "Local": st.column_config.TextColumn("Local", pinned="left"),
