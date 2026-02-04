@@ -4,53 +4,40 @@ import requests
 from io import BytesIO
 
 # 1. Configuração da página
-st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="Inventário MASP", layout="wide", page_icon="🏛️")
 
-# --- DIRETRIZ: URL FIXA E CONFERIDA ---
-URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+# --- URLs DE PUBLICAÇÃO (Ajuste o link do Pietro quando tiver) ---
+URL_LINA = ""https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
+"
+URL_PIETRO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBLmJrDLvDMoz91hpFNLgrJ3pgl_LoenIGP_ptZxxrch3cK9FCIaLkUx4ecD0EMFtWWBcsax7asJDc/pub?output=xlsx
+"
 
+# --- PALETA DE CORES DINÂMICA ---
+# Cores pastéis para os locais (serão atribuídas por ordem de aparecimento)
+PALETA_PASTEL = ["#E8F4F8", "#FFF9E6", "#EAFAF1", "#F5EEF8", "#FDF2E9", "#EBF5FB", "#F4F6F7", "#FEF9E7"]
 
-# --- DICIONÁRIOS DE CORES PASTÉIS ---
-CORES_LOCAIS = {
-    "1º ANDAR": "#E8F4F8", # Azul
-    "MEZANINO": "#FFF9E6", # Amarelo
-    "AQUÁRIO": "#EAFAF1", # Verde
-    "2º SUB-SOLO (VARAS)": "#F5EEF8", # Roxo
-    "2º SUB-SOLO (INFERIOR)": "#FDF2E9" # Laranja
-}
-
-CORES_ITENS = {
-    "PAR 30": "#E8F4F8", # Azul
-    "AR 111": "#FFF9E6", # Amarelo
-    "ELIPSO": "#F5EEF8", # Roxo
-    "BARN": "#EBEDEF",   # Cinza suave
-    "MICRO": "#EAF2F8"   # Azul claro
-}
-
-# --- FUNÇÃO DE ESTILO DE LINHA (LÓGICA POR ABA) ---
-def aplicar_estilo_setorizado(row, aba_atual):
+def gerar_estilo_dinamico(df, aba_atual):
     aba_upper = aba_atual.upper()
-    bg_color = "white" # Fundo padrão
     
-    # REGRA PARA UTILIZADO E SOLICITADO (REFERÊNCIA: LOCAL)
-    if "UTILIZADO" in aba_upper or "SOLICITADO" in aba_upper:
-        local = str(row.get('Local', '')).upper()
-        for chave, cor in CORES_LOCAIS.items():
-            if chave in local:
-                bg_color = cor
-                break
-                
-    # REGRA PARA ESTOQUE (REFERÊNCIA: ITEM)
+    # 1. Cores por LOCAL (Utilizado e Solicitado)
+    if any(x in aba_upper for x in ["UTILIZADO", "SOLICITADO"]):
+        locais_unicos = df['Local'].unique()
+        mapeamento = {local: PALETA_PASTEL[i % len(PALETA_PASTEL)] for i, local in enumerate(locais_unicos)}
+        return df.style.apply(lambda row: [f"background-color: {mapeamento.get(row['Local'], 'white')}; color: black;" for _ in row], axis=1)
+    
+    # 2. Cores por ITEM (Estoque)
     elif "ESTOQUE" in aba_upper:
-        item = str(row.get('Ítem', row.get('Item', ''))).upper()
-        for chave, cor in CORES_ITENS.items():
-            if chave in item:
-                bg_color = cor
-                break
-                
-    return [f"background-color: {bg_color}; color: black;" for _ in row]
+        familias = {"PAR 30": "#E8F4F8", "AR 111": "#FFF9E6", "ELIPSO": "#F5EEF8", "BARN": "#EBEDEF"}
+        def cor_estoque(row):
+            item = str(row.get('Ítem', row.get('Item', ''))).upper()
+            bg = "white"
+            for chave, cor in familias.items():
+                if chave in item: bg = cor; break
+            return [f"background-color: {bg}; color: black;" for _ in row]
+        return df.style.apply(cor_estoque, axis=1)
+    
+    return df.style.set_properties(**{'background-color': 'white', 'color': 'black'})
 
-# --- FUNÇÃO DE ALERTAS (COR DA FONTE) ---
 def destacar_alertas(valor):
     v_str = str(valor)
     if "Falta" in v_str or "❌" in v_str or (v_str.startswith('-') and any(c.isdigit() for c in v_str)):
@@ -60,61 +47,49 @@ def destacar_alertas(valor):
     return ''
 
 @st.cache_data(ttl=20)
-def carregar_dados_seguro(url):
+def carregar_dados(url):
     try:
         response = requests.get(url, timeout=30)
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-    except Exception as e:
-        st.error(f"Erro de conexão: {e}")
-        return None
+    except: return None
 
-st.title("🏛️ Gestão de Iluminação MASP - Lina")
+# --- INTERFACE LATERAL ---
+st.sidebar.title("Edifício")
+edificio = st.sidebar.radio("Escolha a Unidade:", ["Lina Bo Bardi", "Pietro"])
+url_atual = URL_LINA if edificio == "Lina Bo Bardi" else URL_PIETRO
 
-if st.sidebar.button("🔄 Sincronizar Agora"):
+if st.sidebar.button("🔄 Sincronizar"):
     st.cache_data.clear()
     st.rerun()
 
-dict_abas = carregar_dados_seguro(URL_PUB)
-
-if dict_abas:
-    lista_visivel = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
-    aba_sel = st.sidebar.radio("Selecione a Tabela:", lista_visivel)
-    df = dict_abas[aba_sel].copy()
-
-    # 1. Limpeza de colunas
-    df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
-    df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
-    
-    cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
-    for cp in cols_fill: df[cp] = df[cp].ffill()
-
-    # 2. Tratamento Numérico
-    palavras_chave_num = ['saldo', 'quant', 'total', 'uso', 'manut']
-    col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave_num)]
-    for col in col_nums:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-
-    st.markdown("---")
-    busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
-    if busca:
-        df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
-
-    # --- 3. APLICAÇÃO DOS ESTILOS ---
-    estilo_df = df.style.apply(aplicar_estilo_setorizado, aba_atual=aba_sel, axis=1)
-    estilo_df = estilo_df.map(destacar_alertas)
-
-    config = {
-        "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
-        "Item": st.column_config.TextColumn("Item", pinned="left"),
-        "Local": st.column_config.TextColumn("Local", pinned="left"),
-    }
-
-    st.dataframe(
-        estilo_df.format({c: "{:d}" for c in col_nums if c in df.columns}), 
-        use_container_width=True, 
-        height=600, 
-        column_config=config,
-        hide_index=True
-    )
+if url_atual == "SUBSTITUIR_PELA_URL_DO_PIETRO_AQUI":
+    st.info(f"📍 Por favor, insira a URL de publicação do edifício {edificio} no código.")
 else:
-    st.info("💡 Sincronizando dados...")
+    dict_abas = carregar_dados(url_atual)
+    if dict_abas:
+        abas_v = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
+        aba_sel = st.sidebar.radio("Tabela:", abas_v)
+        df = dict_abas[aba_sel].copy()
+        
+        # Limpeza e Formatação
+        df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
+        df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
+        for cp in [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]: df[cp] = df[cp].ffill()
+        
+        col_nums = [c for c in df.columns if any(p in c.lower() for p in ['saldo', 'quant', 'total', 'uso', 'manut'])]
+        for col in col_nums: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+
+        st.title(f"🏛️ Inventário - {edificio}")
+        busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
+        if busca:
+            df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
+
+        # Aplicação de Estilos
+        estilo_final = gerar_estilo_dinamico(df, aba_sel).map(destacar_alertas)
+
+        st.dataframe(
+            estilo_final.format({c: "{:d}" for c in col_nums if c in df.columns}), 
+            use_container_width=True, height=600, hide_index=True,
+            column_config={"Ítem": st.column_config.TextColumn("Ítem", pinned="left"), 
+                           "Local": st.column_config.TextColumn("Local", pinned="left")}
+        )
