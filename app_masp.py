@@ -9,35 +9,45 @@ st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_ico
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
-# --- FUNÇÃO DE CORES POR LOCAL (ESTÉREO PADRONIZADO) ---
+# --- FUNÇÃO DE CORES POR LOCAL ---
 def colorir_locais(valor):
     cores = {
-        "1º ANDAR": "background-color: #e8f4f8; color: black; font-weight: bold;", # Azul
-        "MEZANINO": "background-color: #fef9e7; color: black; font-weight: bold;", # Amarelo
-        "AQUÁRIO": "background-color: #eafaf1; color: black; font-weight: bold;", # Verde
-        "2º SUB-SOLO (VARAS)": "background-color: #f4ecf7; color: black; font-weight: bold;", # Roxo
-        "2º SUB-SOLO (INFERIOR)": "background-color: #fdf2e9; color: black; font-weight: bold;" # Laranja
+        "1º ANDAR": "background-color: #e8f4f8; color: black; font-weight: bold;", 
+        "MEZANINO": "background-color: #fef9e7; color: black; font-weight: bold;", 
+        "AQUÁRIO": "background-color: #eafaf1; color: black; font-weight: bold;", 
+        "2º SUB-SOLO (VARAS)": "background-color: #f4ecf7; color: black; font-weight: bold;", 
+        "2º SUB-SOLO (INFERIOR)": "background-color: #fdf2e9; color: black; font-weight: bold;" 
     }
     v_upper = str(valor).upper()
     for local, estilo in cores.items():
-        if local in v_upper:
+        if local == v_upper: # Comparação exata para evitar pintar o item
             return estilo
     return ""
 
 def destacar_dados(valor):
     v_str = str(valor)
-    # Alertas de Falta ou Erro
-    if "Falta" in v_str or "❌" in v_str or "-" in v_str:
+    # 1. Alerta para falta explícita ou erro
+    if "Falta" in v_str or "❌" in v_str:
         return 'background-color: #ff4b4b; color: white; font-weight: bold;'
-    # Confirmação de OK
+    # 2. Confirmação de OK
     if "✅" in v_str:
         return 'background-color: #2ecc71; color: white; font-weight: bold;'
+    
+    # 3. Lógica para Números Negativos Reais (Déficit)
     try:
-        num = float(valor)
-        if num < 0: return 'background-color: #ff4b4b; color: white;'
-        if num == 0: return 'color: #ccc;'
-        return ''
-    except: return ''
+        # Só tenta converter se não for o nome do item (evita o erro do traço no PAR 30 - 9W)
+        if v_str.strip().startswith('-') and any(char.isdigit() for char in v_str):
+            num = float(v_str.replace(' ', ''))
+            if num < 0:
+                return 'background-color: #ff4b4b; color: white;'
+    except:
+        pass
+
+    # 4. Estética para zeros
+    if v_str == "0":
+        return 'color: #ccc;'
+        
+    return ''
 
 @st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
@@ -65,10 +75,8 @@ if dict_abas:
     df = dict_abas[aba_sel].copy()
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # Esconde colunas técnicas (Chave e auxiliares do pandas)
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
-    # Preenchimento automático de Categoria e Local (ffill)
     cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
     for cp in cols_fill: 
         df[cp] = df[cp].ffill()
@@ -78,16 +86,16 @@ if dict_abas:
     if busca:
         df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-    # Configuração de colunas fixas
     config = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
+        "Item": st.column_config.TextColumn("Item", pinned="left"),
         "Local": st.column_config.TextColumn("Local", pinned="left"),
     }
 
-    # --- APLICAÇÃO DOS ESTILOS ---
+    # APLICAÇÃO SEGURA DOS ESTILOS
     estilo_df = df.style.map(destacar_dados)
     
-    # Aplica cores de local se a coluna existir (independente da aba)
+    # Aplica cores de local apenas na coluna 'Local'
     col_local = [c for c in df.columns if 'LOCAL' in c.upper()]
     if col_local:
         estilo_df = estilo_df.map(colorir_locais, subset=col_local)
