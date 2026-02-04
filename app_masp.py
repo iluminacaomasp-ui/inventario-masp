@@ -20,7 +20,6 @@ CORES_ITENS = {
 # --- FUNÇÕES DE ESTILO ---
 def gerar_estilo_dinamico(df, aba_atual):
     aba_upper = aba_atual.upper()
-    # ALTERAÇÃO 1: Substituído SOLICITADO por SIMULADOR na lógica de cores por local
     if any(x in aba_upper for x in ["UTILIZADO", "SIMULADOR"]):
         if 'Local' in df.columns:
             locais_unicos = df['Local'].unique()
@@ -75,7 +74,7 @@ if edificio_opt != "--- Selecione ---":
 else:
     st.session_state.visualizando = False
 
-# --- TELA DE BOAS-VINDAS (RESETADA PARA O PADRÃO MASTER) ---
+# --- TELA DE BOAS-VINDAS ---
 if not st.session_state.visualizando:
     st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
     st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados.")
@@ -85,7 +84,7 @@ if not st.session_state.visualizando:
     
     ### Como usar o sistema:
     1. **Selecione a Unidade:** No menu à esquerda, escolha qual edifício deseja consultar.
-    2. **Aba Simulador:** Além de consultar o planejamento, você pode simular a disponibilidade de itens no topo da página.
+    2. **Aba Simulador:** Além de consultar o planejamento, você pode simular a disponibilidade de itens por **Local** no topo da página.
     3. **Aba Estoque:** Verifique a quantidade real de material disponível.
     4. **Aba Utilizado:** Veja a distribuição atual dos equipamentos.
     
@@ -97,7 +96,6 @@ if not st.session_state.visualizando:
 elif st.session_state.visualizando:
     dict_abas = carregar_dados(url_atual)
     if dict_abas:
-        # ALTERAÇÃO 2: Substituído SOLICITADO por SIMULADOR na filtragem de abas visíveis
         abas_v = [a for a in dict_abas.keys() if any(x in a.upper() for x in ["ESTOQUE", "UTILIZADO", "SIMULADOR"])]
         aba_sel = st.sidebar.radio("Navegação:", abas_v)
         
@@ -114,15 +112,22 @@ elif st.session_state.visualizando:
 
         st.title(f"🏛️ {edificio_opt} - {aba_sel}")
 
-        # ALTERAÇÃO 3: Substituído SOLICITADO por SIMULADOR na integração do simulador
+        # --- INTEGRAÇÃO DO SIMULADOR (APENAS NA ABA SIMULADOR) ---
         if "SIMULADOR" in aba_sel.upper():
             df_est = dict_abas['Estoque'].copy()
             df_est.columns = [str(c).strip() for c in df_est.columns]
             
-            with st.expander("🔍 SIMULADOR DE DISPONIBILIDADE (Teste aqui antes de planejar)", expanded=True):
-                c1, c2 = st.columns(2)
-                item_simu = c1.selectbox("Equipamento:", df_est['Item'].unique())
-                qtd_simu = c2.number_input("Quantidade Desejada:", min_value=0, step=1)
+            with st.expander("🔍 SIMULADOR DE DISPONIBILIDADE (Teste aqui por Local)", expanded=True):
+                c1, c2, c3 = st.columns([1.5, 2, 1])
+                
+                # Seleção de Local
+                local_simu = c1.selectbox("Selecione o Local:", df['Local'].unique())
+                
+                # Seleção de Equipamento
+                item_simu = c2.selectbox("Equipamento:", df_est['Item'].unique())
+                
+                # Quantidade
+                qtd_simu = c3.number_input("Quantidade:", min_value=0, step=1)
                 
                 if qtd_simu > 0:
                     s_ref = df_est[(df_est['Item'] == item_simu) & (df_est['Categoria'] == 'Refletor')]['Saldo'].sum()
@@ -130,16 +135,14 @@ elif st.session_state.visualizando:
                     s_len = df_est[(df_est['Item'] == item_simu) & (df_est['Categoria'] == 'Lente')]['Saldo'].sum()
                     
                     res1, res2 = st.columns(2)
-                    # Lógica para Refletor/Lente (Itens de corpo)
                     if s_ref > 0 or s_len > 0:
                         estoque_corpo = max(s_ref, s_len)
-                        if estoque_corpo >= qtd_simu: res1.success(f"Corpo/Lente: ✅ OK ({int(estoque_corpo)})")
-                        else: res1.error(f"Corpo/Lente: ⚠️ Falta {int(qtd_simu - estoque_corpo)}")
+                        if estoque_corpo >= qtd_simu: res1.success(f"Disponível no Estoque: ✅ OK ({int(estoque_corpo)})")
+                        else: res1.error(f"Déficit no Estoque: ⚠️ Falta {int(qtd_simu - estoque_corpo)}")
                     
-                    # Lógica para Lâmpada
                     if s_lam > 0:
-                        if s_lam >= qtd_simu: res2.success(f"Lâmpada: ✅ OK ({int(s_lam)})")
-                        else: res2.error(f"Lâmpada: ⚠️ Falta {int(qtd_simu - s_lam)}")
+                        if s_lam >= qtd_simu: res2.success(f"Lâmpadas no Estoque: ✅ OK ({int(s_lam)})")
+                        else: res2.error(f"Lâmpadas no Estoque: ⚠️ Falta {int(qtd_simu - s_lam)}")
 
         busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
         if busca:
