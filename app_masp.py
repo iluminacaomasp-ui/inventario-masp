@@ -14,7 +14,6 @@ URL_PIETRO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBLmJrDLvDMoz91hp
 PALETA_PASTEL_LOCAIS = ["#E8F4F8", "#FFF9E6", "#EAFAF1", "#F5EEF8", "#FDF2E9", "#EBF5FB", "#F4F6F7", "#FEF9E7"]
 CORES_ITENS = {"PAR 30": "#E8F4F8", "AR 111": "#FFF9E6", "ELIPSO": "#F5EEF8", "LENTE": "#EAF2F8", "BARN": "#EBEDEF", "REFLETOR": "#F4F6F7"}
 
-# --- FUNÇÕES DE ESTILO ---
 def gerar_estilo_dinamico(df, aba_atual):
     aba_upper = aba_atual.upper()
     if any(x in aba_upper for x in ["UTILIZADO", "SIMULADOR"]):
@@ -47,7 +46,6 @@ def carregar_dados(url):
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except: return None
 
-# --- LÓGICA DE ESTADO ---
 if 'cesta' not in st.session_state: st.session_state.cesta = []
 if 'visualizando' not in st.session_state: st.session_state.visualizando = False
 
@@ -67,24 +65,11 @@ if edificio_opt != "--- Selecione ---":
 else:
     st.session_state.visualizando = False
 
-# --- TELA DE BOAS-VINDAS (RESTAURADA) ---
 if not st.session_state.visualizando:
     st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
-    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados. As informações são sincronizadas em tempo real com as planilhas oficiais.")
-    st.markdown("""
-    Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**. Aqui você pode consultar o estado atual do estoque e o planejamento das exposições.
-    
-    ### Como usar o sistema:
-    1. **Selecione a Unidade:** No menu à esquerda, escolha qual edifício deseja consultar para carregar os dados.
-    2. **Aba Simulador:** Consulte o planejamento confirmado e use o simulador no topo para testar novos itens acumulados.
-    3. **Aba Estoque:** Verifique a quantidade real de material disponível na sala de estoque hoje.
-    4. **Aba Utilizado:** Veja a distribuição atual dos equipamentos por galeria e andar.
-    5. **Busca Rápida:** Use a lupa acima de cada tabela para localizar itens específicos instantaneamente.
-    ---
-    """)
-    st.markdown("<p style='font-style: italic; color: #888; font-size: 0.9em; text-align: right;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
+    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** e **simulação**.")
+    st.markdown("<p style='text-align: right; font-style: italic; color: #888;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
 
-# --- EXIBIÇÃO DAS TABELAS ---
 elif st.session_state.visualizando:
     dict_abas = carregar_dados(url_atual)
     if dict_abas:
@@ -96,7 +81,8 @@ elif st.session_state.visualizando:
         df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
         for cp in [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]: df[cp] = df[cp].ffill()
         
-        col_nums = [c for c in df.columns if any(p in c.lower() for p in ['saldo', 'quant', 'total', 'uso', 'manut', 'necessária'])]
+        # Formatação numérica automática
+        col_nums = [c for c in df.columns if any(p in c.lower() for p in ['saldo', 'quant', 'total', 'uso', 'manut'])]
         for col in col_nums: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
         if "SIMULADOR" in aba_sel.upper():
@@ -104,10 +90,13 @@ elif st.session_state.visualizando:
             df_est = dict_abas['Estoque'].copy()
             df_est.columns = [str(c).strip() for c in df_est.columns]
             
+            # Localiza a coluna de quantidade na planilha de forma segura
+            col_qtd_planilha = next((c for c in df.columns if 'QUANT' in c.upper()), None)
+
             with st.expander("🛠️ TESTAR NOVOS ITENS (Simulação Temporária)", expanded=True):
                 c1, c2, c3 = st.columns([1.5, 2, 1])
-                local_simu = c1.selectbox("Local:", df['Local'].unique())
-                item_simu = c2.selectbox("Equipamento:", df_est['Item'].unique())
+                local_simu = c1.selectbox("Local:", df['Local'].unique() if 'Local' in df.columns else ["Geral"])
+                item_simu = c2.selectbox("Equipamento:", df_est['Item'].unique() if 'Item' in df_est.columns else ["-"])
                 qtd_simu = c3.number_input("Qtd:", min_value=1, step=1)
                 if st.button("➕ Adicionar à Simulação"):
                     st.session_state.cesta.append({"Local": local_simu, "Item": item_simu, "Qtd": qtd_simu})
@@ -115,22 +104,31 @@ elif st.session_state.visualizando:
             if st.session_state.cesta:
                 st.subheader("📋 Simulação Acumulada (Considerando Reservas da Planilha)")
                 df_cesta = pd.DataFrame(st.session_state.cesta)
+                
                 def calc_status(row):
                     item = row['Item']
                     total_simu = df_cesta[df_cesta['Item'] == item]['Qtd'].sum()
-                    total_planilha = df[df['Item'] == item]['Quantidade'].sum()
+                    
+                    # Conserto do KeyError: busca segura da quantidade reservada na planilha
+                    total_planilha = 0
+                    if col_qtd_planilha:
+                        total_planilha = df[df['Item'] == item][col_qtd_planilha].sum()
+                    
                     s_ref = df_est[(df_est['Item'] == item) & (df_est['Categoria'] == 'Refletor')]['Saldo'].sum()
                     s_lam = df_est[(df_est['Item'] == item) & (df_est['Categoria'] == 'Lâmpada')]['Saldo'].sum()
+                    
                     res = []
+                    livre_ref = s_ref - total_planilha
                     if s_ref > 0:
-                        livre = s_ref - total_planilha
-                        if total_simu <= livre: res.append(f"✅ Refletor OK (Livre: {int(livre)})")
-                        else: res.append(f"⚠️ Falta Refletor ({int(total_simu - livre)})")
+                        if total_simu <= livre_ref: res.append(f"✅ Refletor OK (Livre: {int(livre_ref)})")
+                        else: res.append(f"⚠️ Falta Refletor ({int(total_simu - livre_ref)})")
+                    
+                    livre_lam = s_lam - total_planilha
                     if s_lam > 0:
-                        livre = s_lam - total_planilha
-                        if total_simu <= livre: res.append(f"✅ Lâmpada OK (Livre: {int(livre)})")
-                        else: res.append(f"⚠️ Falta Lâmpada ({int(total_simu - livre)})")
-                    return " | ".join(res)
+                        if total_simu <= livre_lam: res.append(f"✅ Lâmpada OK (Livre: {int(livre_lam)})")
+                        else: res.append(f"⚠️ Falta Lâmpada ({int(total_simu - livre_lam)})")
+                    return " | ".join(res) if res else "Item não encontrado"
+
                 df_cesta['Disponibilidade'] = df_cesta.apply(calc_status, axis=1)
                 st.dataframe(df_cesta.style.map(destacar_alertas), use_container_width=True, hide_index=True)
                 if st.button("🗑️ Limpar Simulação"):
@@ -140,13 +138,10 @@ elif st.session_state.visualizando:
             st.markdown("---")
             st.subheader("📌 Reservas Confirmadas (Dados da Planilha)")
 
-        else:
-            st.title(f"🏛️ {edificio_opt} - {aba_sel}")
-
+        # Busca e Exibição
         busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
         if busca:
             df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-        st.dataframe(gerar_estilo_dinamico(df, aba_sel).map(destacar_alertas).format({c: "{:d}" for c in col_nums if c in df.columns}), 
-                     use_container_width=True, height=500, hide_index=True,
-                     column_config={"Ítem": st.column_config.TextColumn("Ítem", pinned="left"), "Local": st.column_config.TextColumn("Local", pinned="left")})
+        st.dataframe(gerar_estilo_dinamico(df, aba_sel).map(destacar_alertas), 
+                     use_container_width=True, height=500, hide_index=True)
