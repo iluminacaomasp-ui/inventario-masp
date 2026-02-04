@@ -9,7 +9,7 @@ st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_ico
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
-# --- MAPEAMENTO DE CORES (PALETA PASTEL) ---
+# --- DICIONÁRIOS DE CORES ---
 CORES_LOCAIS = {
     "1º ANDAR": "#D6EAF8", "MEZANINO": "#FCF3CF", 
     "AQUÁRIO": "#D4EFDF", "VARAS": "#EBDEF0", "INFERIOR": "#FAD7A0"
@@ -24,24 +24,25 @@ CORES_FAMILIAS = {
 def aplicar_estilo_linha(row, aba_atual):
     item = str(row.get('Ítem', row.get('Item', ''))).upper()
     local = str(row.get('Local', '')).upper()
-    bg_color = "#FFFFFF" # Padrão branco
+    bg_color = "#FFFFFF"
 
-    # Lógica da Aba Solicitado: Prioridade Total para o LOCAL na linha toda
-    if "SOLICITADO" in aba_atual.upper():
+    # REGRA: Utilizado e Solicitado pintam por LOCAL
+    if "UTILIZADO" in aba_atual.upper() or "SOLICITADO" in aba_atual.upper():
         for chave, cor in CORES_LOCAIS.items():
             if chave in local:
                 bg_color = cor
                 break
-    # Outras Abas: Prioridade para a FAMÍLIA do Item na linha toda
+    # REGRA: Estoque pinta por FAMÍLIA DE ITEM
     else:
         for chave, cor in CORES_FAMILIAS.items():
             if chave in item:
                 bg_color = cor
                 break
     
-    return [f"background-color: {bg_color}; color: black;" for _ in row]
+    # Retorna o fundo escolhido e FORÇA o texto preto para não "apagar"
+    return [f"background-color: {bg_color}; color: black !important;" for _ in row]
 
-# --- FUNÇÃO DE ALERTAS (SINALIZAÇÃO) ---
+# --- FUNÇÃO DE ALERTAS (VERMELHO/VERDE) ---
 def destacar_alertas(valor):
     v_str = str(valor)
     # Vermelho para Falta ou Negativos
@@ -52,7 +53,7 @@ def destacar_alertas(valor):
         return 'background-color: #27AE60 !important; color: white !important; font-weight: bold;'
     # Cinza para Zeros
     if v_str in ["0", "0.0"]:
-        return 'color: #BDC3C7;'
+        return 'color: #BDC3C7 !important;'
     return ''
 
 @st.cache_data(ttl=20)
@@ -75,14 +76,13 @@ if dict_abas:
     aba_sel = st.sidebar.radio("Tabela:", lista_visivel)
     df = dict_abas[aba_sel].copy()
     
-    # Limpeza de nomes e colunas técnicas
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
-    # Preenchimento automático (ffill) e Conversão Numérica (Inteiros)
     cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
     for cp in cols_fill: df[cp] = df[cp].ffill()
 
+    # Conversão de números para inteiros (limpeza de decimais)
     palavras_chave_num = ['saldo', 'quant', 'total', 'uso', 'manut', 'observação']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave_num)]
     for col in col_nums:
@@ -93,19 +93,16 @@ if dict_abas:
     if busca:
         df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-    # --- APLICAÇÃO DOS ESTILOS ---
-    # Passo 1: Estilo da linha baseado na regra da Aba
+    # Aplicação dos Estilos em Ordem
     estilo_df = df.style.apply(aplicar_estilo_linha, aba_atual=aba_sel, axis=1)
-    
-    # Passo 2: Alertas (Sobrepõem com !important)
     estilo_df = estilo_df.map(destacar_alertas)
 
-    # Configuração de colunas e Formatação de Inteiros (elimina .0)
     config = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
         "Local": st.column_config.TextColumn("Local", pinned="left")
     }
 
+    # Formatação final para garantir números sem .0
     st.dataframe(
         estilo_df.format({c: "{:d}" for c in col_nums if c in df.columns}), 
         use_container_width=True, 
