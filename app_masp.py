@@ -10,31 +10,40 @@ st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_ico
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
 
-# --- FUNÇÃO DE ESTILO ESPECÍFICA ---
-def aplicar_estilos_masp(df, aba_atual):
-    # Criamos uma cópia do dataframe para aplicar os estilos
+# --- FUNÇÃO DE ESTILO REVISADA (SEM CONFLITOS) ---
+def formatar_tabela_masp(df, aba_atual):
+    # Criamos o objeto de estilo
     styler = df.style
 
-    # 1. Se for a aba Solicitado, pintamos as colunas D e E de Cinza Claro
-    if "SOLICITADO" in aba_atual.upper():
-        # Identificamos as colunas pelos nomes (Status Refletor e Status Lâmpada) ou posições
-        cols_cinza = [c for c in df.columns if "STATUS" in c.upper()]
-        if cols_cinza:
-            styler = styler.set_properties(subset=cols_cinza, **{'background-color': '#F2F2F2', 'color': 'black'})
+    # 1. FORÇAMOS TODAS AS CÉLULAS A TEREM FUNDO BRANCO E TEXTO PRETO (RESET TOTAL)
+    styler = styler.set_properties(**{
+        'background-color': 'white',
+        'color': 'black',
+        'border-color': '#f0f0f0'
+    })
 
-    # 2. FUNÇÃO DE ALERTAS (VERMELHO/VERDE)
-    # Esta função "carimba" a cor por cima, independente da aba
-    def destacar_alertas(valor):
-        v_str = str(valor).strip()
-        # Vermelho para FALTA ou NEGATIVOS
-        if "Falta" in v_str or "❌" in v_str or (v_str.startswith('-') and any(c.isdigit() for c in v_str)):
-            return 'background-color: #E74C3C !important; color: white !important; font-weight: bold;'
-        # Verde para OK
-        if "✅" in v_str:
-            return 'background-color: #27AE60 !important; color: white !important; font-weight: bold;'
+    # 2. SE FOR A ABA SOLICITADO, PINTAMOS AS COLUNAS D E E DE CINZA CLARO
+    if "SOLICITADO" in aba_atual.upper():
+        # Tentamos identificar as colunas Status Refletor e Status Lâmpada
+        cols_status = [c for c in df.columns if "STATUS" in c.upper()]
+        if cols_status:
+            styler = styler.set_properties(subset=cols_status, **{
+                'background-color': '#f8f8f8',
+                'color': 'black'
+            })
+
+    # 3. FUNÇÃO DE ALERTAS (VERMELHO E VERDE)
+    def aplicar_alertas(valor):
+        v = str(valor).strip()
+        # VERMELHO: Se contiver "Falta", "❌" ou for um número negativo
+        if "Falta" in v or "❌" in v or (v.startswith('-') and any(c.isdigit() for c in v)):
+            return 'background-color: #ff4b4b !important; color: white !important; font-weight: bold;'
+        # VERDE: Se contiver "✅" ou "OK"
+        if "✅" in v or v == "OK":
+            return 'background-color: #2ecc71 !important; color: white !important; font-weight: bold;'
         return ''
 
-    return styler.map(destacar_alertas)
+    return styler.map(aplicar_alertas)
 
 @st.cache_data(ttl=20)
 def carregar_dados_seguro(url):
@@ -54,10 +63,10 @@ dict_abas = carregar_dados_seguro(URL_PUB)
 if dict_abas:
     # Filtragem de abas operacionais
     lista_visivel = [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
-    aba_sel = st.sidebar.radio("Tabela:", lista_visivel)
+    aba_sel = st.sidebar.radio("Selecione a Tabela:", lista_visivel)
     df = dict_abas[aba_sel].copy()
     
-    # Limpeza de nomes e colunas técnicas
+    # Limpeza de nomes e colunas
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
@@ -65,7 +74,7 @@ if dict_abas:
     cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
     for cp in cols_fill: df[cp] = df[cp].ffill()
 
-    # Tratamento de Números (Inteiros e sem decimais)
+    # Tratamento de Números para Inteiros
     palavras_chave_num = ['saldo', 'quant', 'total', 'uso', 'manut', 'observação']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave_num)]
     for col in col_nums:
@@ -76,17 +85,18 @@ if dict_abas:
     if busca:
         df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-    # Aplicação dos Estilos Simplificados
-    estilo_df = aplicar_estilos_masp(df, aba_sel)
+    # Aplicação do Estilo Blindado
+    estilo_final = formatar_tabela_masp(df, aba_sel)
 
+    # Configuração de Colunas
     config = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
         "Local": st.column_config.TextColumn("Local", pinned="left")
     }
 
-    # Exibição Final
+    # Exibição com formatação de inteiro para colunas numéricas
     st.dataframe(
-        estilo_df.format({c: "{:d}" for c in col_nums if c in df.columns}), 
+        estilo_final.format({c: "{:d}" for c in col_nums if c in df.columns}), 
         use_container_width=True, 
         height=600, 
         column_config=config
