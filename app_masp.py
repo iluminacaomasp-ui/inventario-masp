@@ -9,11 +9,33 @@ st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_ico
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
-def destacar_estoque(valor):
+# --- FUNÇÃO DE CORES POR LOCAL (ESTÉREO PADRONIZADO) ---
+def colorir_locais(valor):
+    cores = {
+        "1º ANDAR": "background-color: #e8f4f8; color: black; font-weight: bold;", # Azul
+        "MEZANINO": "background-color: #fef9e7; color: black; font-weight: bold;", # Amarelo
+        "AQUÁRIO": "background-color: #eafaf1; color: black; font-weight: bold;", # Verde
+        "2º SUB-SOLO (VARAS)": "background-color: #f4ecf7; color: black; font-weight: bold;", # Roxo
+        "2º SUB-SOLO (INFERIOR)": "background-color: #fdf2e9; color: black; font-weight: bold;" # Laranja
+    }
+    v_upper = str(valor).upper()
+    for local, estilo in cores.items():
+        if local in v_upper:
+            return estilo
+    return ""
+
+def destacar_dados(valor):
+    v_str = str(valor)
+    # Alertas de Falta ou Erro
+    if "Falta" in v_str or "❌" in v_str or "-" in v_str:
+        return 'background-color: #ff4b4b; color: white; font-weight: bold;'
+    # Confirmação de OK
+    if "✅" in v_str:
+        return 'background-color: #2ecc71; color: white; font-weight: bold;'
     try:
         num = float(valor)
-        if num == 0: return 'background-color: #ff4b4b; color: white;' # Vermelho
-        elif num < 5: return 'background-color: #f1c40f; color: black;' # Amarelo
+        if num < 0: return 'background-color: #ff4b4b; color: white;'
+        if num == 0: return 'color: #ccc;'
         return ''
     except: return ''
 
@@ -26,9 +48,7 @@ def carregar_dados_seguro(url):
         st.error(f"Erro de conexão: {e}")
         return None
 
-# --- CABEÇALHO ---
 st.title("🏛️ Gestão de Iluminação MASP - Lina")
-st.markdown("*Monitoramento Online - Estoque e Localização*")
 
 if st.sidebar.button("🔄 Sincronizar Agora"):
     st.cache_data.clear()
@@ -37,79 +57,41 @@ if st.sidebar.button("🔄 Sincronizar Agora"):
 dict_abas = carregar_dados_seguro(URL_PUB)
 
 if dict_abas:
-    # --- LÓGICA PARA ESCONDER ABAS OPERACIONAIS E AUXILIARES ---
     lista_abas_total = list(dict_abas.keys())
-    # Esconde Entrada, Saída e abas que contenham AUX ou CONFIG no nome
-    termos_proibidos = ["ENTRADA", "SAÍDA", "AUX", "CONFIG"]
-    lista_abas_visiveis = [
-        a for a in lista_abas_total 
-        if not any(termo in a.upper() for termo in termos_proibidos)
-    ]
+    termos_ocultos = ["ENTRADA", "SAÍDA", "AUX", "CONFIG"]
+    lista_visivel = [a for a in lista_abas_total if not any(t in a.upper() for t in termos_ocultos)]
     
-    if not lista_abas_visiveis:
-        lista_abas_visiveis = lista_abas_total
-
-    aba_sel = st.sidebar.radio("Selecione a Tabela:", lista_abas_visiveis)
+    aba_sel = st.sidebar.radio("Tabela:", lista_visivel)
     df = dict_abas[aba_sel].copy()
-
-    # 1. Limpeza de nomes e REMOÇÃO DE COLUNAS AUXILIARES (Chave, etc)
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     
-    # Filtra colunas: esconde a "Chave" e qualquer uma que o pandas nomear como "Unnamed"
-    colunas_finais = [c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]
-    df = df[colunas_finais]
+    # Esconde colunas técnicas (Chave e auxiliares do pandas)
+    df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
-    # 2. Tratamento de células mescladas (Categoria e Local)
-    cols_para_preencher = [c for c in df.columns if any(p in c.lower() for p in ['categoria', 'local'])]
-    for cp in cols_para_preencher:
+    # Preenchimento automático de Categoria e Local (ffill)
+    cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
+    for cp in cols_fill: 
         df[cp] = df[cp].ffill()
 
-    # 3. Identifica colunas numéricas
-    palavras_chave = ['saldo', 'quant', 'total', 'em ', 'patrimônio', 'uso', 'manut']
-    col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave)]
-    for col in col_nums:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-
     st.markdown("---")
-    
-    # 4. Busca e Download
-    busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:", placeholder="Digite o que procura...")
-    
+    busca = st.text_input(f"🔍 Pesquisar em {aba_sel}:")
     if busca:
-        mask = df.apply(lambda row: row.astype(str).str.contains(busca, case=False).any(), axis=1)
-        df = df[mask]
+        df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name=aba_sel)
-    st.download_button(
-        label=f"📥 Baixar {aba_sel} (Excel)",
-        data=output.getvalue(),
-        file_name=f"Inventario_MASP_{aba_sel}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # 5. Configuração de largura e Congelamento (Pinned)
-    config_colunas = {
+    # Configuração de colunas fixas
+    config = {
         "Ítem": st.column_config.TextColumn("Ítem", pinned="left"),
-        "Item": st.column_config.TextColumn("Item", pinned="left"),
         "Local": st.column_config.TextColumn("Local", pinned="left"),
     }
+
+    # --- APLICAÇÃO DOS ESTILOS ---
+    estilo_df = df.style.map(destacar_dados)
     
-    for cn in col_nums:
-        config_colunas[cn] = st.column_config.NumberColumn(cn, format="%d")
+    # Aplica cores de local se a coluna existir (independente da aba)
+    col_local = [c for c in df.columns if 'LOCAL' in c.upper()]
+    if col_local:
+        estilo_df = estilo_df.map(colorir_locais, subset=col_local)
 
-    # Identifica coluna de cor (Saldo)
-    col_cor = [c for c in df.columns if any(x in c.lower() for x in ['saldo', 'disponível'])]
-
-    # EXIBIÇÃO FINAL
-    st.dataframe(
-        df.style.map(destacar_estoque, subset=col_cor).format({c: "{:.0f}" for c in col_nums}),
-        use_container_width=True, 
-        height=600, 
-        column_config=config_colunas
-    )
-
+    st.dataframe(estilo_df, use_container_width=True, height=600, column_config=config)
 else:
-    st.info("💡 Sincronizando com a nuvem...")
-
+    st.info("💡 Sincronizando dados...")
