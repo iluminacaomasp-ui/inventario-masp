@@ -64,9 +64,11 @@ if dict_abas:
     abas_v = ["🏠 Início"] + [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
     aba_sel = st.sidebar.radio("Navegação:", abas_v)
 
- # --- TELA DE BOAS-VINDAS ---
+    # --- TELA DE BOAS-VINDAS ---
     if aba_sel == "🏠 Início":
-        st.title("Bem-vindo ao Inventário do MASP")
+        # Título com a cor vermelha oficial do MASP (#ff0000 ou #E30613)
+        st.markdown("<h1 style='color: #E30613;'>Bem-vindo ao Inventário do MASP</h1>", unsafe_allow_html=True)
+        
         st.markdown("""
         Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
         
@@ -109,4 +111,5 @@ if dict_abas:
         )
 else:
     st.info("💡 Carregando dados do servidor...")
+
 
