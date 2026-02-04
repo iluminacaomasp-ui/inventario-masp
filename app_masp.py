@@ -44,12 +44,18 @@ def destacar_alertas(valor):
         return 'color: #2ecc71; font-weight: bold;'
     return ''
 
-@st.cache_data(ttl=20)
+# --- ENCAIXE DA NOVA FUNÇÃO DE CARREGAMENTO (FORÇAR ATUALIZAÇÃO) ---
+@st.cache_data(ttl=2) 
 def carregar_dados(url):
     try:
-        response = requests.get(url, timeout=30)
+        # Marcador de tempo para forçar o Google a processar as fórmulas
+        timestamp = str(pd.Timestamp.now().timestamp())
+        url_final = f"{url}&cache_bust={timestamp}"
+        response = requests.get(url_final, timeout=30)
+        # engine='openpyxl' lê o resultado final da célula (o "OK" ou "Falta")
         return pd.read_excel(BytesIO(response.content), sheet_name=None, engine='openpyxl')
-    except: return None
+    except:
+        return None
 
 # --- LÓGICA DE ESTADO ---
 if 'visualizando' not in st.session_state:
@@ -78,18 +84,16 @@ else:
 # --- TELA DE BOAS-VINDAS ---
 if not st.session_state.visualizando:
     st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
-    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados. As informações são sincronizadas em tempo real com as planilhas oficiais.")
+    st.info("⚠️ **Nota:** Este aplicativo destina-se exclusivamente à **consulta** de dados. As informações são sincronizadas em tempo real.")
     
     st.markdown("""
-    Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**. Aqui você pode consultar o estado atual do estoque e o planejamento das exposições.
+    Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
     
     ### Como usar o sistema:
-    1. **Selecione a Unidade:** No menu à esquerda, escolha qual edifício deseja consultar para carregar os dados.
-    2. **Aba Solicitado (Planejamento):** Consulte aqui se os equipamentos necessários para o projeto estão disponíveis. Os alertas em vermelho indicam itens em falta no estoque.
-    3. **Aba Estoque:** Verifique a quantidade real de material disponível na sala de estoque hoje.
-    4. **Aba Utilizado:** Veja a distribuição atual dos equipamentos por galeria e andar.
-    5. **Busca Rápida:** Use a lupa acima de cada tabela para localizar itens específicos instantaneamente.
-    
+    1. **Selecione a Unidade:** No menu à esquerda para carregar os dados.
+    2. **Aba Solicitado:** Planeje inserindo as quantidades na planilha e confira aqui a disponibilidade.
+    3. **Aba Estoque:** Verifique o material disponível na sala de estoque.
+    4. **Aba Utilizado:** Veja a distribuição atual dos equipamentos.
     ---
     """)
     st.markdown("<p style='font-style: italic; color: #888; font-size: 0.9em; text-align: right;'>Desenvolvido por: Marcel Alani Gilber</p>", unsafe_allow_html=True)
@@ -98,11 +102,10 @@ if not st.session_state.visualizando:
 elif st.session_state.visualizando:
     dict_abas = carregar_dados(url_atual)
     if dict_abas:
-        # Lógica de Abas: Mantém apenas Estoque, Utilizado e Solicitado
         abas_v = [a for a in dict_abas.keys() if any(x in a.upper() for x in ["ESTOQUE", "UTILIZADO", "SOLICITADO"])]
         
         if not abas_v:
-            st.warning("Nenhuma aba válida encontrada na planilha. Verifique os nomes: Estoque, Utilizado ou Solicitado.")
+            st.warning("Nenhuma aba válida encontrada.")
         else:
             aba_sel = st.sidebar.radio("Navegação:", abas_v)
             
@@ -113,7 +116,6 @@ elif st.session_state.visualizando:
             for cp in [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]: 
                 df[cp] = df[cp].ffill()
             
-            # Formatação numérica corrigida para aceitar as colunas da aba Solicitado
             col_nums = [c for c in df.columns if any(p in c.lower() for p in ['saldo', 'quant', 'total', 'uso', 'manut', 'necessária'])]
             for col in col_nums: 
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
