@@ -64,10 +64,10 @@ if dict_abas:
     abas_v = ["🏠 Início"] + [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
     aba_sel = st.sidebar.radio("Navegação:", abas_v)
 
-    # --- TELA DE BOAS-VINDAS ---
+ # --- TELA DE BOAS-VINDAS ---
     if aba_sel == "🏠 Início":
-        st.title(f"Bem-vindo ao Inventário {edificio}")
-        st.markdown(f"""
+        st.title("Bem-vindo ao Inventário do MASP")
+        st.markdown("""
         Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
         
         ### Como usar o sistema:
@@ -81,7 +81,6 @@ if dict_abas:
         ---
         *Dica: Clique em **Sincronizar Dados** no menu lateral se houver novas alterações na planilha.*
         """)
-        st.image("https://masp.org.br", width=200) # Logo opcional ou imagem do prédio
 
     # --- EXIBIÇÃO DAS TABELAS ---
     else:
@@ -110,3 +109,4 @@ if dict_abas:
         )
 else:
     st.info("💡 Carregando dados do servidor...")
+
