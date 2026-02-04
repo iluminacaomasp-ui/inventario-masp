@@ -64,11 +64,10 @@ if dict_abas:
     abas_v = ["🏠 Início"] + [a for a in dict_abas.keys() if not any(t in a.upper() for t in ["ENTRADA", "SAÍDA", "AUX", "CONFIG"])]
     aba_sel = st.sidebar.radio("Navegação:", abas_v)
 
-           # --- TELA DE BOAS-VINDAS ---
+               # --- TELA DE BOAS-VINDAS ---
     if aba_sel == "🏠 Início":
-        # Título focado apenas na marca MASP
-        st.markdown("<h1 style='color: #E30613; font-size: 60px; margin-bottom: 0;'>MASP</h1>", unsafe_allow_html=True)
-        st.markdown("<h3 style='margin-top: 0;'>Inventário de Iluminação</h3>", unsafe_allow_html=True)
+        # A frase fica no estilo H1, mas o vermelho só "pinta" a palavra MASP
+        st.markdown("<h1>Bem-vindo ao Inventário do <span style='color: #E30613;'>MASP</span></h1>", unsafe_allow_html=True)
         
         st.markdown("""
         Este sistema foi desenvolvido para facilitar a gestão de iluminação do **MASP**.
@@ -112,6 +111,7 @@ if dict_abas:
         )
 else:
     st.info("💡 Carregando dados do servidor...")
+
 
 
 
