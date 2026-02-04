@@ -9,7 +9,8 @@ st.set_page_config(page_title="Inventário MASP - Lina", layout="wide", page_ico
 # --- DIRETRIZ: URL FIXA E CONFERIDA ---
 URL_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5xDC_D1MLVhmm03puk-5goOFTelsYp9eT7gyUzscAnkXAvho4noxsbBoeCscTsJC8JfWfxZ5wdnRW/pub?output=xlsx"
 
-# --- DICIONÁRIOS DE CORES ---
+
+# --- DICIONÁRIOS DE CORES PASTÉIS ---
 CORES_LOCAIS = {
     "1º ANDAR": "#D6EAF8", "MEZANINO": "#FCF3CF", 
     "AQUÁRIO": "#D4EFDF", "VARAS": "#EBDEF0", "INFERIOR": "#FAD7A0"
@@ -20,40 +21,40 @@ CORES_FAMILIAS = {
     "ELIPSO": "#F5EEF8", "BARN": "#EBEDEF"
 }
 
-# --- FUNÇÃO DE ESTILO DE LINHA ---
+# --- FUNÇÃO DE ESTILO DE LINHA (BASE) ---
 def aplicar_estilo_linha(row, aba_atual):
     item = str(row.get('Ítem', row.get('Item', ''))).upper()
     local = str(row.get('Local', '')).upper()
-    bg_color = "#FFFFFF"
+    bg_color = "#FFFFFF" # Fundo padrão branco
 
-    # REGRA: Utilizado e Solicitado pintam por LOCAL
-    if "UTILIZADO" in aba_atual.upper() or "SOLICITADO" in aba_atual.upper():
+    # Regra para abas de Localização (Utilizado e Solicitado)
+    if any(x in aba_atual.upper() for x in ["UTILIZADO", "SOLICITADO"]):
         for chave, cor in CORES_LOCAIS.items():
             if chave in local:
                 bg_color = cor
                 break
-    # REGRA: Estoque pinta por FAMÍLIA DE ITEM
+    # Regra para aba de Estoque
     else:
         for chave, cor in CORES_FAMILIAS.items():
             if chave in item:
                 bg_color = cor
                 break
     
-    # Retorna o fundo escolhido e FORÇA o texto preto para não "apagar"
-    return [f"background-color: {bg_color}; color: black !important;" for _ in row]
+    # Texto sempre PRETO para leitura clara em fundos coloridos
+    return [f"background-color: {bg_color}; color: black;" for _ in row]
 
-# --- FUNÇÃO DE ALERTAS (VERMELHO/VERDE) ---
+# --- FUNÇÃO DE ALERTAS (SOBREPOSIÇÃO) ---
 def destacar_alertas(valor):
     v_str = str(valor)
-    # Vermelho para Falta ou Negativos
+    # 1. Vermelho para FALTA ou NEGATIVOS
     if "Falta" in v_str or "❌" in v_str or (v_str.startswith('-') and any(c.isdigit() for c in v_str)):
         return 'background-color: #E74C3C !important; color: white !important; font-weight: bold;'
-    # Verde para OK
+    # 2. Verde para OK
     if "✅" in v_str:
         return 'background-color: #27AE60 !important; color: white !important; font-weight: bold;'
-    # Cinza para Zeros
+    # 3. Zeros ficam em cinza discreto para não poluir
     if v_str in ["0", "0.0"]:
-        return 'color: #BDC3C7 !important;'
+        return 'color: #AAB7B8 !important;'
     return ''
 
 @st.cache_data(ttl=20)
@@ -76,13 +77,15 @@ if dict_abas:
     aba_sel = st.sidebar.radio("Tabela:", lista_visivel)
     df = dict_abas[aba_sel].copy()
     
+    # Limpeza de nomes
     df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
     df = df[[c for c in df.columns if "CHAVE" not in c.upper() and "UNNAMED" not in c.upper()]]
     
+    # Preenchimento automático (ffill)
     cols_fill = [c for c in df.columns if any(p in c.lower() for p in ['local', 'categoria'])]
     for cp in cols_fill: df[cp] = df[cp].ffill()
 
-    # Conversão de números para inteiros (limpeza de decimais)
+    # Tratamento Numérico (Inteiros sem .0)
     palavras_chave_num = ['saldo', 'quant', 'total', 'uso', 'manut', 'observação']
     col_nums = [c for c in df.columns if any(p in c.lower() for p in palavras_chave_num)]
     for col in col_nums:
@@ -93,8 +96,11 @@ if dict_abas:
     if busca:
         df = df[df.apply(lambda r: r.astype(str).str.contains(busca, case=False).any(), axis=1)]
 
-    # Aplicação dos Estilos em Ordem
+    # --- APLICAÇÃO DOS ESTILOS ---
+    # Primeiro aplicamos a cor de fundo da linha (Local ou Família)
     estilo_df = df.style.apply(aplicar_estilo_linha, aba_atual=aba_sel, axis=1)
+    
+    # Depois aplicamos os alertas (OK / Falta) que vão "vencer" a cor de fundo
     estilo_df = estilo_df.map(destacar_alertas)
 
     config = {
@@ -102,7 +108,7 @@ if dict_abas:
         "Local": st.column_config.TextColumn("Local", pinned="left")
     }
 
-    # Formatação final para garantir números sem .0
+    # Exibição Final - Formatando para INTEIRO puro
     st.dataframe(
         estilo_df.format({c: "{:d}" for c in col_nums if c in df.columns}), 
         use_container_width=True, 
